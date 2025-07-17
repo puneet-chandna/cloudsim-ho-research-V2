@@ -13,9 +13,9 @@ import java.util.logging.Logger;
  * This exception handles various validation failures including input validation,
  * result validation, configuration validation, and constraint violations.
  * 
- * @author CloudSim Plus HO Research Framework
+ * @author Puneet Chandna
  * @version 1.0.0
- * @since CloudSim Plus 8.0.0
+ * @since 2025-07-15
  */
 public class ValidationException extends Exception implements Serializable {
     

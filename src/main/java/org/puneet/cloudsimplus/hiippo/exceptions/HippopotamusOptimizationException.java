@@ -13,9 +13,9 @@ import java.util.logging.Logger;
  * This exception provides detailed error information including error codes, 
  * context, and timestamps for debugging and logging purposes.
  * 
- * @author CloudSim Plus HO Research Framework
+ * @author Puneet Chandna
  * @version 1.0.0
- * @since CloudSim Plus 8.0.0
+ * @since 2025-07-15
  */
 public class HippopotamusOptimizationException extends Exception implements Serializable {
     

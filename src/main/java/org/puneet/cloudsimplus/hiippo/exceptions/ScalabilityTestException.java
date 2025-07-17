@@ -14,9 +14,10 @@ import java.util.logging.Logger;
  * This exception handles errors related to performance degradation, resource exhaustion,
  * time complexity violations, and scalability limit detection during large-scale experiments.
  * 
- * @author CloudSim Plus HO Research Framework
+ * 
+ * @author Puneet Chandna
  * @version 1.0.0
- * @since CloudSim Plus 8.0.0
+ * @since 2025-07-15
  */
 public class ScalabilityTestException extends Exception implements Serializable {
     

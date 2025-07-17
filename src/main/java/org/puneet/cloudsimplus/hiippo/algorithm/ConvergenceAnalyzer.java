@@ -21,9 +21,9 @@ import java.util.*;
  * </ul>
  * </p>
  * 
- * @author Puneet Research Team
+ * @author Puneet Chandna
  * @version 1.0.0
- * @since 2024-01-01
+ * @since 2025-07-15
  */
 public class ConvergenceAnalyzer {
     
