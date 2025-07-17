@@ -47,7 +47,7 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     // Cache for performance optimization
     private final Map<String, Double> fitnessCache = new ConcurrentHashMap<>();
     private Random random;
-    private List<Vm> pendingVms;
+    // Remove: private List<Vm> pendingVms;
     private Solution bestSolution;
     private int currentGeneration = 0;
     
@@ -57,7 +57,7 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     public GeneticAlgorithmAllocation() {
         super();
         this.random = new Random(ExperimentConfig.RANDOM_SEED);
-        this.pendingVms = new ArrayList<>();
+        // Remove: this.pendingVms = new ArrayList<>();
         logger.info("Initialized Genetic Algorithm allocation policy with population size: {}, generations: {}", 
                    POPULATION_SIZE, MAX_GENERATIONS);
     }
@@ -71,34 +71,38 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
      */
     @Override
     public boolean allocateHostForVm(Vm vm) {
-        if (vm == null) {
-            logger.warn("Attempted to allocate null VM");
-            return false;
+        // This method is now just a placeholder.
+        // The main logic will be in placeAllVms().
+        return true;
+    }
+
+    /**
+     * This is the new primary method. It should be called by your
+     * custom DatacenterBroker once all VMs have been submitted.
+     * It runs the GA for all VMs that need placement.
+     */
+    public boolean placeAllVms() {
+        // Collect all VMs that haven't been allocated yet.
+        final List<Vm> vmsToPlace = /* TODO: Provide VM list source here */ new ArrayList<>();
+
+        if (vmsToPlace.isEmpty()) {
+            logger.info("GA: No VMs to place.");
+            return true;
         }
-        
-        logger.debug("GA allocation request for VM {} (ID: {})", vm, vm.getId());
-        
-        try {
-            // Add VM to pending list
-            pendingVms.add(vm);
-            
-            // Process batch when we have enough VMs or this is the last VM
-            if (shouldProcessBatch()) {
-                logger.info("Processing batch of {} VMs using GA", pendingVms.size());
-                return processBatchAllocation();
-            }
-            
-            // For immediate allocation (single VM), run GA with current VM only
-            if (pendingVms.size() == 1) {
-                return processImmediateAllocation(vm);
-            }
-            
-            return true; // VM added to pending, will be processed in batch
-            
-        } catch (Exception e) {
-            logger.error("Error in GA allocation for VM {}: {}", vm.getId(), e.getMessage(), e);
-            return false;
+
+        logger.info("Running GA for a batch of {} VMs.", vmsToPlace.size());
+        MemoryManager.checkMemoryUsage("GA Execution");
+
+        // Run the genetic algorithm on the entire list.
+        Solution solution = runGeneticAlgorithm(vmsToPlace);
+
+        if (solution != null && solution.isValid()) {
+            logger.info("GA found a valid solution. Applying allocation...");
+            return applySolution(solution, vmsToPlace);
         }
+
+        logger.error("GA failed to find a valid solution for the batch of VMs.");
+        return false;
     }
     
     /**
@@ -107,8 +111,7 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
      * @return true if batch should be processed
      */
     private boolean shouldProcessBatch() {
-        return pendingVms.size() >= AlgorithmConstants.BATCH_SIZE || 
-               !hasMoreVmsToAllocate();
+        return false; // No longer applicable
     }
     
     /**
@@ -147,7 +150,7 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
      * @return true if all VMs were successfully allocated
      */
     private boolean processBatchAllocation() {
-        if (pendingVms.isEmpty()) {
+        if (false) { // No longer applicable
             logger.debug("No pending VMs to process");
             return true;
         }
@@ -156,8 +159,8 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
         MemoryManager.checkMemoryUsage("GA Batch Processing");
         
         // Create a copy of pending VMs for processing
-        List<Vm> vmsToProcess = new ArrayList<>(pendingVms);
-        pendingVms.clear();
+        List<Vm> vmsToProcess = new ArrayList<>(); // No longer applicable
+        // pendingVms.clear(); // No longer applicable
         
         logger.info("Running GA for batch of {} VMs", vmsToProcess.size());
         long startTime = System.currentTimeMillis();
@@ -201,19 +204,19 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
             }
             
             bestSolution = population.get(0);
-            double bestFitness = evaluateFitness(bestSolution);
+            double bestFitness = evaluateFitness(bestSolution, vms);
             
             // Evolution loop
             for (currentGeneration = 0; currentGeneration < MAX_GENERATIONS; currentGeneration++) {
                 // Evaluate fitness for all solutions
-                evaluatePopulation(population);
+                evaluatePopulation(population, vms);
                 
                 // Sort by fitness (ascending - lower is better)
-                population.sort(Comparator.comparingDouble(this::getCachedFitness));
+                population.sort(Comparator.comparingDouble(solution -> getCachedFitness(solution, vms)));
                 
                 // Update best solution
                 Solution currentBest = population.get(0);
-                double currentBestFitness = getCachedFitness(currentBest);
+                double currentBestFitness = getCachedFitness(currentBest, vms);
                 
                 if (currentBestFitness < bestFitness) {
                     bestSolution = currentBest.clone();
@@ -522,16 +525,16 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     /**
      * Evaluates fitness for entire population.
      */
-    private void evaluatePopulation(List<Solution> population) {
-        population.parallelStream().forEach(this::evaluateFitness);
+    private void evaluatePopulation(List<Solution> population, List<Vm> vms) {
+        population.parallelStream().forEach(solution -> evaluateFitness(solution, vms));
     }
     
     /**
      * Gets cached fitness value or calculates if not cached.
      */
-    private double getCachedFitness(Solution solution) {
+    private double getCachedFitness(Solution solution, List<Vm> vms) {
         String key = solution.toString();
-        return fitnessCache.computeIfAbsent(key, k -> evaluateFitness(solution));
+        return fitnessCache.computeIfAbsent(key, k -> evaluateFitness(solution, vms));
     }
     
     /**
@@ -541,15 +544,15 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
      * @param solution the solution to evaluate
      * @return fitness value
      */
-    private double evaluateFitness(Solution solution) {
+    private double evaluateFitness(Solution solution, List<Vm> vms) {
         if (solution == null || !solution.isValid()) {
             return Double.MAX_VALUE;
         }
         
         try {
-            double utilization = calculateResourceUtilization(solution);
-            double power = calculatePowerConsumption(solution);
-            double slaViolations = calculateSLAViolations(solution);
+            double utilization = calculateResourceUtilization(solution, vms);
+            double power = calculatePowerConsumption(solution, vms);
+            double slaViolations = calculateSLAViolations(solution, vms);
             
             // Normalize values to [0,1] range
             double normalizedUtil = 1.0 - utilization; // We want high utilization, so invert
@@ -578,9 +581,8 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
  * @param solution the solution to evaluate
  * @return average utilization (0-1 range, higher is better)
  */
-private double calculateResourceUtilization(Solution solution) {
+private double calculateResourceUtilization(Solution solution, List<Vm> vms) {
     List<Host> hosts = getHostList();
-    List<Vm> vms = pendingVms; // Assuming we're evaluating for pending VMs
     
     if (hosts.isEmpty() || vms.isEmpty()) {
         return 0.0;
@@ -649,9 +651,8 @@ private double calculateResourceUtilization(Solution solution) {
  * @param solution the solution to evaluate
  * @return total power consumption in watts
  */
-private double calculatePowerConsumption(Solution solution) {
+private double calculatePowerConsumption(Solution solution, List<Vm> vms) {
     List<Host> hosts = getHostList();
-    List<Vm> vms = pendingVms;
     
     double totalPower = 0.0;
     
@@ -706,9 +707,8 @@ private double calculatePowerConsumption(Solution solution) {
  * @param solution the solution to evaluate
  * @return number of potential SLA violations
  */
-private double calculateSLAViolations(Solution solution) {
+private double calculateSLAViolations(Solution solution, List<Vm> vms) {
     List<Host> hosts = getHostList();
-    List<Vm> vms = pendingVms;
     
     double totalViolations = 0.0;
     
@@ -776,8 +776,8 @@ private double calculateSLAViolations(Solution solution) {
         }
         
         // Check fitness variance
-        double minFitness = getCachedFitness(population.get(0));
-        double maxFitness = getCachedFitness(population.get(Math.min(ELITE_SIZE, population.size() - 1)));
+        double minFitness = getCachedFitness(population.get(0), /* TODO: Provide VM list source here */ new ArrayList<>());
+        double maxFitness = getCachedFitness(population.get(Math.min(ELITE_SIZE, population.size() - 1)), /* TODO: Provide VM list source here */ new ArrayList<>());
         
         return (maxFitness - minFitness) < AlgorithmConstants.DEFAULT_CONVERGENCE_THRESHOLD;
     }
@@ -842,7 +842,7 @@ private double calculateSLAViolations(Solution solution) {
         // Select random individuals for tournament
         for (int i = 0; i < TOURNAMENT_SIZE; i++) {
             Solution candidate = population.get(random.nextInt(population.size()));
-            double fitness = getCachedFitness(candidate);
+            double fitness = getCachedFitness(candidate, /* TODO: Provide VM list source here */ new ArrayList<>());
             
             if (fitness < bestFitness) {
                 bestFitness = fitness;
