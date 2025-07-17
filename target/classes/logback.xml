@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File Appender for Main Application -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/cloudsim-ho.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/cloudsim-ho-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Separate File for Experiment Results -->
+    <appender name="EXPERIMENT" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/experiment-results.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/experiment-results-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>60</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Memory Monitor Appender -->
+    <appender name="MEMORY" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/memory-usage.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/memory-usage-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Performance Metrics Appender -->
+    <appender name="PERFORMANCE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/performance-metrics.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Error File Appender -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/errors.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n%ex{full}</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Logger Configuration -->
+    
+    <!-- CloudSim Plus Logging -->
+    <logger name="org.cloudsimplus" level="WARN"/>
+    <logger name="org.cloudbus.cloudsim" level="WARN"/>
+    
+    <!-- Application Loggers -->
+    <logger name="org.cloudsimplus.ho" level="INFO"/>
+    <logger name="org.cloudsimplus.ho.algorithm" level="DEBUG"/>
+    <logger name="org.cloudsimplus.ho.simulation" level="INFO"/>
+    <logger name="org.cloudsimplus.ho.util.MetricsCollector" level="DEBUG"/>
+    <logger name="org.cloudsimplus.ho.statistical" level="INFO"/>
+    
+    <!-- Specialized Loggers -->
+    <logger name="org.cloudsimplus.ho.util.MemoryManager" level="INFO" additivity="false">
+        <appender-ref ref="MEMORY"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    
+    <logger name="org.cloudsimplus.ho.util.PerformanceMonitor" level="INFO" additivity="false">
+        <appender-ref ref="PERFORMANCE"/>
+    </logger>
+    
+    <logger name="org.cloudsimplus.ho.simulation.ExperimentRunner" level="INFO" additivity="false">
+        <appender-ref ref="EXPERIMENT"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    
+    <!-- Root Logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </root>
+</configuration>
