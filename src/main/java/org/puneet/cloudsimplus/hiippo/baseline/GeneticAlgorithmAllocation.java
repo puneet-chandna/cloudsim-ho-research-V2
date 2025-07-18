@@ -73,7 +73,7 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     public boolean allocateHostForVm(Vm vm) {
         // This method is now just a placeholder.
         // The main logic will be in placeAllVms().
-        return true;
+        return true; 
     }
 
     /**
