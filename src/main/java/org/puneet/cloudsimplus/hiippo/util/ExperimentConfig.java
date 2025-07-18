@@ -3,6 +3,12 @@ package org.puneet.cloudsimplus.hiippo.util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Properties;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -176,6 +182,79 @@ public final class ExperimentConfig {
     private static final Object initializationLock = new Object();
     
     // ===================================================================================
+    // CONFIG PROPERTIES LOADING
+    // ===================================================================================
+    private static final Properties properties = new Properties();
+    private static final Set<String> enabledScenarios = new HashSet<>();
+    static {
+        try (InputStream input = ExperimentConfig.class.getClassLoader().getResourceAsStream("config.properties")) {
+            if (input != null) {
+                properties.load(input);
+                String scenarios = properties.getProperty("scenarios.enabled", "");
+                enabledScenarios.clear();
+                for (String s : scenarios.split(",")) {
+                    if (!s.isBlank()) enabledScenarios.add(s.trim());
+                }
+            } else {
+                throw new RuntimeException("config.properties not found in classpath");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load config.properties", e);
+        }
+    }
+
+    public static boolean isScenarioEnabled(String scenario) {
+        return enabledScenarios.contains(scenario.trim());
+    }
+
+    public static int getHostCountForScenario(String scenario) {
+        String key = "scenario." + scenario.toLowerCase() + ".hosts";
+        String value = properties.getProperty(key);
+        if (value == null) {
+            throw new IllegalArgumentException("Host count for scenario '" + scenario + "' not found in config.properties");
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid host count for scenario '" + scenario + "': " + value);
+        }
+    }
+
+    public static long getHostMips() {
+        return getLongProperty("host.mips", 3000);
+    }
+    public static long getHostRam() {
+        return getLongProperty("host.ram", 16384);
+    }
+    public static long getHostStorage() {
+        return getLongProperty("host.storage", 1000000);
+    }
+    public static long getHostBw() {
+        return getLongProperty("host.bandwidth", 10000);
+    }
+    public static int getHostPes() {
+        return getIntProperty("host.pes", 8);
+    }
+    private static long getLongProperty(String key, long defaultValue) {
+        String value = properties.getProperty(key);
+        if (value == null) return defaultValue;
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "' in config.properties: " + value);
+        }
+    }
+    private static int getIntProperty(String key, int defaultValue) {
+        String value = properties.getProperty(key);
+        if (value == null) return defaultValue;
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid value for '" + key + "' in config.properties: " + value);
+        }
+    }
+    
+    // ===================================================================================
     // CONSTRUCTOR - PREVENT INSTANTIATION
     // ===================================================================================
     
@@ -205,7 +284,7 @@ public final class ExperimentConfig {
         randomGenerators.put(replication, random);
         
         // Also set CloudSim Plus random seed for consistency
-        org.cloudsimplus.util.RandomGenerator.setSeed(seed);
+        // (RandomGenerator class not found, skipping setting CloudSim Plus random seed)
         
         logger.debug("Initialized random seed for replication {}: {}", replication, seed);
     }

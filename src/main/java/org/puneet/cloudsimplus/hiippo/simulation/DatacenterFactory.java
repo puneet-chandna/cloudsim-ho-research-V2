@@ -46,13 +46,6 @@ public class DatacenterFactory {
     private static final double COST_PER_BW = 0.01;
     private static final double SCHEDULING_INTERVAL = 0.1;
     
-    // Host configuration constants - optimized for memory efficiency
-    private static final int HOST_PES = 8;
-    private static final long HOST_MIPS = 3000;
-    private static final long HOST_RAM_MB = 16384; // 16 GB
-    private static final long HOST_STORAGE_MB = 1000000; // 1 TB
-    private static final long HOST_BW_MBPS = 10000; // 10 Gbps
-    
     // Power model constants (based on real server specifications)
     private static final double MAX_POWER_WATTS = 250.0;
     private static final double STATIC_POWER_PERCENT = 0.7; // 70% of max power
@@ -137,8 +130,11 @@ public class DatacenterFactory {
             VmAllocationPolicy vmAllocationPolicy) {
         
         Objects.requireNonNull(scenario, "Scenario cannot be null");
-        
-        int hostCount = getHostCountForScenario(scenario);
+        // Early scenario validation using ExperimentConfig
+        if (!ExperimentConfig.isScenarioEnabled(scenario)) {
+            throw new IllegalArgumentException("Scenario '" + scenario + "' is not enabled in config.properties");
+        }
+        int hostCount = ExperimentConfig.getHostCountForScenario(scenario);
         String datacenterName = "DC_" + scenario;
         
         logger.info("Creating datacenter for scenario '{}' with {} hosts", scenario, hostCount);
@@ -197,18 +193,23 @@ public class DatacenterFactory {
     private static Host createHost(CloudSim simulation, int id, String schedulerType) {
         List<Pe> peList = createPeList();
         
-        HostSimple host = new HostSimple(HOST_RAM_MB, HOST_BW_MBPS, HOST_STORAGE_MB, peList);
+        HostSimple host = new HostSimple(
+            ExperimentConfig.getHostRam(),
+            ExperimentConfig.getHostBw(),
+            ExperimentConfig.getHostStorage(),
+            peList
+        );
         host.setId(id);
         // Set scheduler based on parameter
-    switch (schedulerType.toLowerCase()) {
-        case "spaceshared":
-            host.setVmScheduler(new VmSchedulerSpaceShared());
-            break;
-        case "timeshared":
-        default:
-            host.setVmScheduler(new VmSchedulerTimeShared());
-            break;
-    }
+        switch (schedulerType.toLowerCase()) {
+            case "spaceshared":
+                host.setVmScheduler(new VmSchedulerSpaceShared());
+                break;
+            case "timeshared":
+            default:
+                host.setVmScheduler(new VmSchedulerTimeShared());
+                break;
+        }
         host.setRamProvisioner(new ResourceProvisionerSimple());
         host.setBwProvisioner(new ResourceProvisionerSimple());
         
@@ -228,9 +229,11 @@ public class DatacenterFactory {
      * @return List of configured PE instances
      */
     private static List<Pe> createPeList() {
-        List<Pe> peList = new ArrayList<>(HOST_PES);
-        for (int i = 0; i < HOST_PES; i++) {
-            peList.add(new PeSimple(HOST_MIPS));
+        int pes = ExperimentConfig.getHostPes();
+        long mips = ExperimentConfig.getHostMips();
+        List<Pe> peList = new ArrayList<>(pes);
+        for (int i = 0; i < pes; i++) {
+            peList.add(new PeSimple(mips));
         }
         return peList;
     }
