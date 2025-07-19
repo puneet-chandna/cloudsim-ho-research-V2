@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
  * and memory-efficient processing of large-scale scenarios.
  * 
  * Key features:
- * - Batch processing support for memory efficiency
+ * - Batch processing support for me0n mory efficiency
  * - Real-time metrics collection during execution
  * - Progress tracking for long-running experiments
  * - Validation of VM allocations
