@@ -127,8 +127,9 @@ public class MetricsCollector {
             
             for (Datacenter datacenter : datacenters) {
                 if (datacenter == null) continue;
-                
-                for (Host host : datacenter.getHostList()) {
+                List<Host> hostList = datacenter.getHostList();
+                if (hostList == null) continue;
+                for (Host host : hostList) {
                     if (host == null) continue;
                     
                     // CPU utilization
@@ -139,14 +140,15 @@ public class MetricsCollector {
                     totalCpuUsed += hostCpuUsed;
                     
                     // RAM utilization
-                    double hostRamCapacity = host.getRam().getCapacity();
-                    double hostRamUsed = host.getRam().getAllocatedResource();
-                    
-                    totalRamCapacity += hostRamCapacity;
-                    totalRamUsed += hostRamUsed;
+                    if (host.getRam() != null) {
+                        double hostRamCapacity = host.getRam().getCapacity();
+                        double hostRamUsed = host.getRam().getAllocatedResource();
+                        totalRamCapacity += hostRamCapacity;
+                        totalRamUsed += hostRamUsed;
+                    }
                     
                     // Check for SLA violations
-                    checkHostSLAViolation(host, hostCpuUsed / hostCpuCapacity);
+                    checkHostSLAViolation(host, hostCpuUsed / (hostCpuCapacity == 0 ? 1 : hostCpuCapacity));
                 }
             }
             
@@ -186,16 +188,17 @@ public class MetricsCollector {
         try {
             for (Datacenter datacenter : datacenters) {
                 if (datacenter == null) continue;
-                
-                for (Host host : datacenter.getHostList()) {
+                List<Host> hostList = datacenter.getHostList();
+                if (hostList == null) continue;
+                for (Host host : hostList) {
                     if (host == null) continue;
                     
                     // Get power consumption based on utilization
-                    double utilization = host.getCpuMipsUtilization() / 
-                                       host.getTotalMipsCapacity();
+                    double hostTotalMips = host.getTotalMipsCapacity();
+                    double utilization = hostTotalMips > 0 ? host.getCpuMipsUtilization() / hostTotalMips : 0.0;
                     
                     // Check if host has power model
-                    if (host.getPowerModel() != PowerModel.NULL) {
+                    if (host.getPowerModel() != null) {
                         double hostPower = host.getPowerModel().getPower(utilization);
                         totalPower += hostPower;
                         
