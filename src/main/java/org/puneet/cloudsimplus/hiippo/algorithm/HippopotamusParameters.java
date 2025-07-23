@@ -382,6 +382,11 @@ public class HippopotamusParameters {
         this.weightSLA = weightSLA;
     }
     
+    // Aliases for ParameterTuner compatibility
+    public void setUtilizationWeight(double w) { setWeightUtilization(w); }
+    public void setPowerWeight(double w) { setWeightPower(w); }
+    public void setSlaWeight(double w) { setWeightSLA(w); }
+    
     public double getExplorationRate() {
         return explorationRate;
     }

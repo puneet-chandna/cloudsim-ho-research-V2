@@ -174,6 +174,14 @@ public class ValidationException extends Exception implements Serializable {
         logException();
     }
     
+    public ValidationException(String message) {
+        this(ValidationType.CONFIGURATION_VALIDATION, message, null, new ArrayList<>(), null, new HashMap<>());
+    }
+
+    public ValidationException(String message, Throwable cause) {
+        this(ValidationType.CONFIGURATION_VALIDATION, message, null, new ArrayList<>(), cause, new HashMap<>());
+    }
+    
     /**
      * Creates a validation exception for null value scenarios.
      * 

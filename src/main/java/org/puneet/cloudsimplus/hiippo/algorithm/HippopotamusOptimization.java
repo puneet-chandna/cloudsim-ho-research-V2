@@ -40,6 +40,16 @@ public class HippopotamusOptimization {
     private final Map<String, Solution> solutionCache;
     private final List<Double> fitnessHistory;
     
+    // Add static parameters for global tuning
+    public static HippopotamusParameters staticParameters = new HippopotamusParameters();
+
+    public static void setParameters(HippopotamusParameters params) {
+        if (params != null) {
+            staticParameters = params.copy();
+            logger.info("Global HO parameters updated: {}", staticParameters);
+        }
+    }
+    
     /**
      * Creates a new HippopotamusOptimization instance with default parameters.
      */

@@ -526,6 +526,62 @@ public class CSVResultsWriter {
     }
     
     /**
+     * Writes parameter tuning results to a CSV file. The data map should have a single key (sheet name) mapping to a list of row maps.
+     * Each row map represents a row, with keys as column headers.
+     */
+    public void writeParameterTuningResults(String filePath, Map<String, List<Map<String, Object>>> data) {
+        if (data == null || data.isEmpty()) return;
+        for (Map.Entry<String, List<Map<String, Object>>> entry : data.entrySet()) {
+            List<Map<String, Object>> rows = entry.getValue();
+            if (rows == null || rows.isEmpty()) continue;
+            Set<String> headers = new LinkedHashSet<>();
+            for (Map<String, Object> row : rows) headers.addAll(row.keySet());
+            try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath));
+                 CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(headers.toArray(new String[0])))) {
+                for (Map<String, Object> row : rows) {
+                    List<Object> values = new ArrayList<>();
+                    for (String h : headers) values.add(row.getOrDefault(h, ""));
+                    printer.printRecord(values);
+                }
+            } catch (Exception e) {
+                logger.error("Failed to write parameter tuning results to {}", filePath, e);
+            }
+        }
+    }
+
+    /**
+     * Appends a single intermediate result row to a CSV file. If the file does not exist, headers are written.
+     */
+    public void appendIntermediateResult(String filePath, Map<String, Object> row) {
+        if (row == null || row.isEmpty()) return;
+        Set<String> headers = row.keySet();
+        boolean fileExists = Files.exists(Paths.get(filePath));
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+             CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(headers.toArray(new String[0])))) {
+            if (!fileExists) printer.printRecord(headers);
+            List<Object> values = new ArrayList<>();
+            for (String h : headers) values.add(row.getOrDefault(h, ""));
+            printer.printRecord(values);
+        } catch (Exception e) {
+            logger.error("Failed to append intermediate result to {}", filePath, e);
+        }
+    }
+
+    /**
+     * Writes a summary row to a CSV file. Overwrites the file.
+     */
+    public void writeTuningSummary(String filePath, Map<String, Object> summary) {
+        if (summary == null || summary.isEmpty()) return;
+        Set<String> headers = summary.keySet();
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath));
+             CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(headers.toArray(new String[0])))) {
+            printer.printRecord(summary.values());
+        } catch (Exception e) {
+            logger.error("Failed to write tuning summary to {}", filePath, e);
+        }
+    }
+    
+    /**
      * Experiment result data structure for CSV writing.
      */
     public static class ExperimentResult {
