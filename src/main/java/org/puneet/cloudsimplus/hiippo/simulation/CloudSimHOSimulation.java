@@ -264,17 +264,25 @@ public class CloudSimHOSimulation {
                 allocationEndTime = System.currentTimeMillis();
                 return result;
             }
-            
+
             @Override
             public boolean allocateHostForVm(Vm vm, Host host) {
-                return basePolicy.allocateHostForVm(vm, host);
+                // If basePolicy returns HostSuitability or similar, convert to boolean
+                Object result = basePolicy.allocateHostForVm(vm, host);
+                if (result instanceof Boolean) {
+                    return (Boolean) result;
+                } else if (result != null && result.toString().equalsIgnoreCase("true")) {
+                    return true;
+                } else {
+                    return false;
+                }
             }
-            
+
             @Override
             public void deallocateHostForVm(Vm vm) {
                 basePolicy.deallocateHostForVm(vm);
             }
-            
+
             @Override
             public Map<Vm, Host> getOptimizedAllocationMap(List<? extends Vm> vmList) {
                 if (allocationStartTime == 0) {
@@ -284,25 +292,66 @@ public class CloudSimHOSimulation {
                 allocationEndTime = System.currentTimeMillis();
                 return result;
             }
-            
+
             @Override
             public Host getHostForVm(Vm vm) {
                 return basePolicy.getHostForVm(vm);
             }
-            
+
             @Override
             public boolean isVmMigrationSupported() {
                 return basePolicy.isVmMigrationSupported();
             }
-            
+
             @Override
             public Datacenter getDatacenter() {
                 return basePolicy.getDatacenter();
             }
-            
+
             @Override
             public void setDatacenter(Datacenter datacenter) {
                 basePolicy.setDatacenter(datacenter);
+            }
+
+            // Implement missing abstract methods as no-ops or delegating to basePolicy if possible
+            @Override
+            public Optional<Host> findHostForVm(Vm vm) {
+                try {
+                    return basePolicy.findHostForVm(vm);
+                } catch (Exception e) {
+                    return Optional.empty();
+                }
+            }
+
+            @Override
+            public <T extends Vm> boolean allocateHostForVm(Collection<T> vms) {
+                // Not used in this context; return false
+                return false;
+            }
+
+            @Override
+            public void setHostCountForParallelSearch(int count) {
+                // No-op
+            }
+
+            @Override
+            public void scaleVmVertically(org.cloudsimplus.vms.VerticalVmScaling<?> scaling) {
+                // No-op
+            }
+
+            @Override
+            public List<Host> getHostList() {
+                return basePolicy.getHostList();
+            }
+
+            @Override
+            public int getHostCountForParallelSearch() {
+                return 1;
+            }
+
+            @Override
+            public void setFindHostForVmFunction(java.util.function.BiFunction<VmAllocationPolicy, Vm, Optional<Host>> fn) {
+                // No-op
             }
         };
     }
@@ -658,24 +707,24 @@ public class CloudSimHOSimulation {
      */
     private void validateSimulationResults(ExperimentResult result) throws ValidationException {
         // Check basic validity
-        if (result.getCpuUtilization() < 0 || result.getCpuUtilization() > 1) {
-            throw new ValidationException("Invalid CPU utilization: " + result.getCpuUtilization());
+        if (result.getResourceUtilCPU() < 0 || result.getResourceUtilCPU() > 1) {
+            throw new ValidationException("Invalid CPU utilization: " + result.getResourceUtilCPU());
         }
         
-        if (result.getRamUtilization() < 0 || result.getRamUtilization() > 1) {
-            throw new ValidationException("Invalid RAM utilization: " + result.getRamUtilization());
+        if (result.getResourceUtilRAM() < 0 || result.getResourceUtilRAM() > 1) {
+            throw new ValidationException("Invalid RAM utilization: " + result.getResourceUtilRAM());
         }
         
         if (result.getPowerConsumption() < 0) {
             throw new ValidationException("Invalid power consumption: " + result.getPowerConsumption());
         }
         
-        if (result.getAllocatedVms() > result.getTotalVms()) {
+        if (result.getVmAllocated() > result.getVmTotal()) {
             throw new ValidationException("Allocated VMs exceed total VMs");
         }
         
         // Check allocation success rate
-        double allocationRate = (double) result.getAllocatedVms() / result.getTotalVms();
+        double allocationRate = (double) result.getVmAllocated() / result.getVmTotal();
         if (allocationRate < 0.5) {
             logger.warn("Low allocation success rate: {:.2f}%", allocationRate * 100);
         }

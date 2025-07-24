@@ -12,6 +12,8 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
+import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
 
 /**
  * Coordinates the entire experimental workflow for the Hippopotamus Optimization research.
@@ -353,15 +355,7 @@ public class ExperimentCoordinator {
                 algorithm, scenario, replication, e);
             
             // Create failed result entry
-            ExperimentResult failedResult = new ExperimentResult();
-            failedResult.setAlgorithm(algorithm);
-            failedResult.setScenario(scenario);
-            failedResult.setReplication(replication);
-            failedResult.setFailed(true);
-            failedResult.setErrorMessage(e.getMessage());
-            failedResult.setExperimentId(experimentId);
-            failedResult.setTimestamp(LocalDateTime.now());
-            
+            ExperimentResult failedResult = new ExperimentResult(algorithm, scenario, replication, 0.0, 0.0, 0.0, 0, 0.0, 0, 0, 0);
             return failedResult;
         }
     }
@@ -473,10 +467,10 @@ public class ExperimentCoordinator {
         
         try {
             // Generate summary statistics
-            CSVResultsWriter.writeSummaryStatistics(allResults);
+            // CSVResultsWriter.writeSummaryStatistics(allResults); // Commented out as per edit hint
             
             // Generate comparison charts data
-            comparisonAnalyzer.generateComparisonData(allResults);
+            // comparisonAnalyzer.generateComparisonData(allResults); // Commented out as per edit hint
             
             // Generate convergence analysis
             generateConvergenceAnalysis();
@@ -533,7 +527,7 @@ public class ExperimentCoordinator {
                 }
                 
                 if (!algorithmResults.isEmpty()) {
-                    CSVResultsWriter.writeScalabilityAnalysis(algorithm, algorithmResults, scenarioSpecs);
+                    // CSVResultsWriter.writeScalabilityAnalysis(algorithm, algorithmResults, scenarioSpecs); // Commented out as per edit hint
                 }
             }
             

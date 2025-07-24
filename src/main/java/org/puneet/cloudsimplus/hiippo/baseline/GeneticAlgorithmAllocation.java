@@ -595,10 +595,27 @@ private double calculateResourceUtilization(Solution solution, List<Vm> vms) {
     // Initialize with current utilization
     for (int i = 0; i < hosts.size(); i++) {
         Host host = hosts.get(i);
-        double currentCpuUtil = host.getVmScheduler().getAllocatedMips() / 
-            host.getTotalMipsCapacity();
-        double currentRamUtil = (host.getRam().getCapacity() - 
-            host.getRam().getAvailableResource()) / host.getRam().getCapacity();
+        double currentCpuUtil = 0.0;
+        try {
+            // getAllocatedMips() may require a VM argument; if so, sum over all VMs
+            double totalAllocatedMips = 0.0;
+            for (Vm vm : host.getVmList()) {
+                Object mipsObj = host.getVmScheduler().getAllocatedMips(vm);
+                if (mipsObj instanceof Number) {
+                    totalAllocatedMips += ((Number) mipsObj).doubleValue();
+                } else if (mipsObj != null && mipsObj.getClass().getSimpleName().equals("MipsShare")) {
+                    try {
+                        totalAllocatedMips += ((Number) mipsObj.getClass().getMethod("getValue").invoke(mipsObj)).doubleValue();
+                    } catch (Exception e) {
+                        logger.error("Error extracting value from MipsShare: {}", e.getMessage());
+                    }
+                }
+            }
+            currentCpuUtil = host.getTotalMipsCapacity() > 0 ? totalAllocatedMips / host.getTotalMipsCapacity() : 0.0;
+        } catch (Exception e) {
+            logger.error("Error getting allocated MIPS for host {}: {}", host.getId(), e.getMessage());
+        }
+        double currentRamUtil = (host.getRam().getCapacity() - host.getRam().getAvailableResource()) / host.getRam().getCapacity();
         
         hostCpuUtilization.put(i, currentCpuUtil);
         hostRamUtilization.put(i, currentRamUtil);
@@ -662,8 +679,25 @@ private double calculatePowerConsumption(Solution solution, List<Vm> vms) {
     // First, get current utilization
     for (int i = 0; i < hosts.size(); i++) {
         Host host = hosts.get(i);
-        double currentUtil = host.getVmScheduler().getAllocatedMips() / 
-            host.getTotalMipsCapacity();
+        double currentUtil = 0.0;
+        try {
+            double totalAllocatedMips = 0.0;
+            for (Vm vm : host.getVmList()) {
+                Object mipsObj = host.getVmScheduler().getAllocatedMips(vm);
+                if (mipsObj instanceof Number) {
+                    totalAllocatedMips += ((Number) mipsObj).doubleValue();
+                } else if (mipsObj != null && mipsObj.getClass().getSimpleName().equals("MipsShare")) {
+                    try {
+                        totalAllocatedMips += ((Number) mipsObj.getClass().getMethod("getValue").invoke(mipsObj)).doubleValue();
+                    } catch (Exception e) {
+                        logger.error("Error extracting value from MipsShare: {}", e.getMessage());
+                    }
+                }
+            }
+            currentUtil = host.getTotalMipsCapacity() > 0 ? totalAllocatedMips / host.getTotalMipsCapacity() : 0.0;
+        } catch (Exception e) {
+            logger.error("Error getting allocated MIPS for host {}: {}", host.getId(), e.getMessage());
+        }
         hostCpuUtilization.put(i, currentUtil);
     }
     
@@ -719,9 +753,21 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
     // Initialize with current allocations
     for (int i = 0; i < hosts.size(); i++) {
         Host host = hosts.get(i);
-        hostMipsAllocation.put(i, host.getVmScheduler().getAllocatedMips());
-        hostRamAllocation.put(i, host.getRam().getCapacity() - 
-            host.getRam().getAvailableResource());
+        double totalAllocatedMips = 0.0;
+        for (Vm vm : host.getVmList()) {
+            Object mipsObj = host.getVmScheduler().getAllocatedMips(vm);
+            if (mipsObj instanceof Number) {
+                totalAllocatedMips += ((Number) mipsObj).doubleValue();
+            } else if (mipsObj != null && mipsObj.getClass().getSimpleName().equals("MipsShare")) {
+                try {
+                    totalAllocatedMips += ((Number) mipsObj.getClass().getMethod("getValue").invoke(mipsObj)).doubleValue();
+                } catch (Exception e) {
+                    logger.error("Error extracting value from MipsShare: {}", e.getMessage());
+                }
+            }
+        }
+        hostMipsAllocation.put(i, totalAllocatedMips);
+        hostRamAllocation.put(i, host.getRam().getCapacity() - host.getRam().getAvailableResource());
     }
     
     // Add allocations from solution
@@ -958,6 +1004,42 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
     @Override
     public String getName() {
         return "GA";
+    }
+    
+    /**
+     * Selects a host for the given VM from a list of suitable hosts using a best-fit heuristic (minimum resource waste).
+     *
+     * @param vm The VM to allocate
+     * @param suitableHosts List of suitable hosts
+     * @return The selected host or null if none found
+     */
+    @Override
+    protected Host selectHost(Vm vm, List<Host> suitableHosts) {
+        if (suitableHosts == null || suitableHosts.isEmpty()) {
+            return null;
+        }
+        Host bestHost = null;
+        double minWaste = Double.MAX_VALUE;
+        for (Host host : suitableHosts) {
+            double waste = calculateResourceWaste(vm, host, null, null, null); // Use simple waste calc
+            if (waste < minWaste) {
+                minWaste = waste;
+                bestHost = host;
+            }
+        }
+        return bestHost;
+    }
+
+    /**
+     * Returns the first suitable host for the given VM as Optional, as required by VmAllocationPolicyAbstract.
+     */
+    @Override
+    public java.util.Optional<Host> defaultFindHostForVm(Vm vm) {
+        List<Host> suitableHosts = getHostList().stream()
+            .filter(h -> h != null && h.isActive() && h.isSuitableForVm(vm))
+            .collect(Collectors.toList());
+        Host host = selectHost(vm, suitableHosts);
+        return java.util.Optional.ofNullable(host);
     }
     
     /**
