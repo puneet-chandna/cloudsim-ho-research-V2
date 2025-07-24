@@ -81,7 +81,8 @@ public class ScalabilityTester {
      */
     private void configureJVM() {
         try {
-            System.setProperty("java.vm.options", JVM_ARGS);
+            // JVM options must be set when starting the JVM, not at runtime
+            // Use: java -Xmx6G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 ...
             
             // Log current JVM settings
             Runtime runtime = Runtime.getRuntime();
