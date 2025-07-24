@@ -462,8 +462,8 @@ public class App {
                     double usagePercentage = (heapUsed * 100.0) / heapMax;
                     
                     if (usagePercentage > 90) {
-                        logger.warn("High memory usage detected: {:.2f}% ({} MB / {} MB)",
-                            usagePercentage, heapUsed / (1024 * 1024), heapMax / (1024 * 1024));
+                        logger.warn("High memory usage detected: {}% ({} MB / {} MB)",
+                            String.format("%.2f", usagePercentage), heapUsed / (1024 * 1024), heapMax / (1024 * 1024));
                         
                         // Try to free memory
                         System.gc();
