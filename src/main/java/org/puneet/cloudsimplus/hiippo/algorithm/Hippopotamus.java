@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.commons.math3.special.Gamma;
 
 /**
  * Hippopotamus.java
@@ -90,6 +91,11 @@ public class Hippopotamus implements Cloneable, Comparable<Hippopotamus> {
      */
     private boolean evaluated = false;
     
+    /**
+     * The solution (VM-to-host mapping) represented by this hippopotamus.
+     */
+    private org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy.Solution solution;
+    
     // ===================================================================================
     // CONSTRUCTORS
     // ===================================================================================
@@ -139,6 +145,24 @@ public class Hippopotamus implements Cloneable, Comparable<Hippopotamus> {
         this.position = source.position.clone();
         this.bestPosition = source.bestPosition.clone();
         this.velocity = source.velocity.clone();
+    }
+    
+    /**
+     * Creates a new hippopotamus with the specified solution and fitness.
+     *
+     * @param solution the solution (VM-to-host mapping)
+     * @param fitness the fitness value
+     */
+    public Hippopotamus(org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy.Solution solution, double fitness) {
+        this.id = -1;
+        this.vmCount = solution != null ? solution.getAllocations().size() : 0;
+        this.hostCount = 0; // Not tracked here
+        this.position = null;
+        this.velocity = null;
+        this.bestPosition = null;
+        this.fitness = fitness;
+        this.bestFitness = fitness;
+        this.solution = solution;
     }
     
     // ===================================================================================
@@ -239,9 +263,9 @@ public class Hippopotamus implements Cloneable, Comparable<Hippopotamus> {
      */
     private double generateLevyFlight() {
         double sigma = Math.pow(
-            (Math.gamma(1 + AlgorithmConstants.LEVY_LAMBDA) * 
+            (Gamma.gamma(1 + AlgorithmConstants.LEVY_LAMBDA) * 
              Math.sin(Math.PI * AlgorithmConstants.LEVY_LAMBDA / 2)) /
-            (Math.gamma((1 + AlgorithmConstants.LEVY_LAMBDA) / 2) * 
+            (Gamma.gamma((1 + AlgorithmConstants.LEVY_LAMBDA) / 2) * 
              AlgorithmConstants.LEVY_LAMBDA * Math.pow(2, (AlgorithmConstants.LEVY_LAMBDA - 1) / 2)),
             1 / AlgorithmConstants.LEVY_LAMBDA);
         
@@ -367,6 +391,30 @@ public class Hippopotamus implements Cloneable, Comparable<Hippopotamus> {
     public String toString() {
         return String.format("Hippopotamus{id=%d, fitness=%.6f, generation=%d, position=%s}",
             id, fitness, generation, Arrays.toString(position));
+    }
+    
+    /**
+     * Returns the solution (VM-to-host mapping) for this hippopotamus.
+     * @return the solution
+     */
+    public org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy.Solution getSolution() {
+        return solution;
+    }
+
+    /**
+     * Sets the fitness value for this hippopotamus.
+     * @param fitness the fitness value
+     */
+    public void setFitness(double fitness) {
+        this.fitness = fitness;
+    }
+    
+    /**
+     * Sets the solution (VM-to-host mapping) for this hippopotamus.
+     * @param solution the solution to set
+     */
+    public void setSolution(org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy.Solution solution) {
+        this.solution = solution;
     }
     
     // ===================================================================================

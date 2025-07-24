@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import org.puneet.cloudsimplus.hiippo.exceptions.StatisticalValidationException;
 
 /**
  * Encapsulates results from ANOVA (Analysis of Variance) statistical tests.
@@ -113,7 +114,7 @@ public class ANOVAResult {
      * @throws StatisticalValidationException if data is insufficient or invalid
      */
     public static ANOVAResult performANOVA(Map<String, double[]> data, String metricName, 
-                                         double significanceLevel) {
+                                         double significanceLevel) throws StatisticalValidationException {
         logger.info("Performing ANOVA for metric: {} with {} groups", metricName, data.size());
         
         long startTime = System.currentTimeMillis();
@@ -162,9 +163,10 @@ public class ANOVAResult {
             
             return result;
             
-        } catch (MathIllegalArgumentException | NullArgumentException | DimensionMismatchException e) {
+        } catch (MathIllegalArgumentException e) {
             throw new StatisticalValidationException(
-                "Failed to perform ANOVA: " + e.getMessage(), e);
+                StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR,
+                "Failed to perform ANOVA: " + e.getMessage());
         }
     }
     
@@ -176,7 +178,7 @@ public class ANOVAResult {
      * @return ANOVA result
      * @throws StatisticalValidationException if data is insufficient or invalid
      */
-    public static ANOVAResult performANOVA(Map<String, double[]> data, String metricName) {
+    public static ANOVAResult performANOVA(Map<String, double[]> data, String metricName) throws StatisticalValidationException {
         return performANOVA(data, metricName, DEFAULT_SIGNIFICANCE_LEVEL);
     }
     
@@ -375,24 +377,28 @@ public class ANOVAResult {
         }
     }
     
-    private static void validateData(Map<String, double[]> data) {
+    private static void validateData(Map<String, double[]> data) throws StatisticalValidationException {
         if (data == null || data.isEmpty()) {
-            throw new StatisticalValidationException("Data map cannot be null or empty");
+            throw new StatisticalValidationException(
+                StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR,
+                "Data map cannot be null or empty");
         }
         if (data.size() < MIN_GROUPS) {
             throw new StatisticalValidationException(
+                StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR,
                 "ANOVA requires at least " + MIN_GROUPS + " groups");
         }
         
         for (Map.Entry<String, double[]> entry : data.entrySet()) {
             if (entry.getValue() == null || entry.getValue().length < MIN_OBSERVATIONS_PER_GROUP) {
                 throw new StatisticalValidationException(
+                    StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR,
                     "Group '" + entry.getKey() + "' has insufficient observations");
             }
         }
     }
     
-    private static double calculateGrandMean(Map<String, double[]> data) {
+    private static double calculateGrandMean(Map<String, double[]> data) throws StatisticalValidationException {
         double sum = 0;
         int count = 0;
         for (double[] group : data.values()) {
@@ -404,7 +410,7 @@ public class ANOVAResult {
         return sum / count;
     }
     
-    private static double calculateSumSquaresBetween(Map<String, double[]> data, double grandMean) {
+    private static double calculateSumSquaresBetween(Map<String, double[]> data, double grandMean) throws StatisticalValidationException {
         double ssb = 0;
         for (double[] group : data.values()) {
             double groupMean = Arrays.stream(group).average().orElse(0);
@@ -413,7 +419,7 @@ public class ANOVAResult {
         return ssb;
     }
     
-    private static double calculateSumSquaresWithin(Map<String, double[]> data) {
+    private static double calculateSumSquaresWithin(Map<String, double[]> data) throws StatisticalValidationException {
         double ssw = 0;
         for (double[] group : data.values()) {
             double groupMean = Arrays.stream(group).average().orElse(0);
@@ -453,7 +459,7 @@ public class ANOVAResult {
             ));
     }
     
-    private static double calculateCohensD(double[] data1, double[] data2) {
+    public static double calculateCohensD(double[] data1, double[] data2) {
         double mean1 = Arrays.stream(data1).average().orElse(0);
         double mean2 = Arrays.stream(data2).average().orElse(0);
         

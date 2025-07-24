@@ -61,10 +61,10 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
     /**
      * Statistics tracking for algorithm performance
      */
-    private final AtomicLong totalAllocations = new AtomicLong(0);
-    private final AtomicLong successfulAllocations = new AtomicLong(0);
-    private final AtomicLong cacheHits = new AtomicLong(0);
-    private final AtomicLong cacheMisses = new AtomicLong(0);
+    private int totalAllocations = 0;
+    private int successfulAllocations = 0;
+    private int cacheHits = 0;
+    private int cacheMisses = 0;
     
     /**
      * Resource-specific wastage statistics
@@ -77,6 +77,8 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
      */
     private final AtomicLong totalAllocationTime = new AtomicLong(0);
     private final AtomicLong totalHostSearchTime = new AtomicLong(0);
+    
+    private static final String STORAGE_KEY = "storage";
     
     /**
      * Default constructor for BestFitAllocation.
@@ -111,12 +113,12 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
         totalResourceWastage.put("cpu", 0.0);
         totalResourceWastage.put("ram", 0.0);
         totalResourceWastage.put("bw", 0.0);
-        totalResourceWastage.put("storage", 0.0);
+        totalResourceWastage.put(STORAGE_KEY, 0.0);
         
         resourceWastageCount.put("cpu", 0L);
         resourceWastageCount.put("ram", 0L);
         resourceWastageCount.put("bw", 0L);
-        resourceWastageCount.put("storage", 0L);
+        resourceWastageCount.put(STORAGE_KEY, 0L);
     }
     
     /**
@@ -182,7 +184,7 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
             throw new IllegalArgumentException("VM cannot be null");
         }
         
-        totalAllocations.incrementAndGet();
+        totalAllocations++;
         long startTime = System.currentTimeMillis();
         
         try {
@@ -192,25 +194,28 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
                 return false;
             }
             
-            // Find the best host
-            long searchStartTime = System.currentTimeMillis();
-            Host bestHost = findBestHostForVm(vm);
-            totalHostSearchTime.addAndGet(System.currentTimeMillis() - searchStartTime);
+            // Find suitable hosts
+            List<Host> suitableHosts = getHostList().stream().filter(h -> isHostSuitableForVm(h, vm)).collect(Collectors.toList());
+            if (suitableHosts.isEmpty()) {
+                logger.warn("No suitable host found for VM {} - all hosts either full or unsuitable", vm.getId());
+                return false;
+            }
             
+            // Select best host
+            Host bestHost = selectHost(vm, suitableHosts);
             if (bestHost == null) {
-                logger.warn("No suitable host found for VM {} - all hosts either full or unsuitable", 
-                    vm.getId());
+                logger.warn("No suitable host found for VM {} after selectHost", vm.getId());
                 return false;
             }
             
             // Calculate waste before allocation for statistics
             ResourceWastage wastage = calculateDetailedResourceWastage(bestHost, vm);
             
-            // Attempt allocation
-            boolean allocated = allocateHostForVm(vm, bestHost);
+            // Attempt allocation using performAllocation
+            boolean allocated = performAllocation(vm, bestHost);
             
             if (allocated) {
-                successfulAllocations.incrementAndGet();
+                successfulAllocations++;
                 long allocationTime = System.currentTimeMillis() - startTime;
                 totalAllocationTime.addAndGet(allocationTime);
                 
@@ -241,51 +246,26 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
     }
     
     /**
-     * Finds the best host for the given VM based on minimum resource waste.
-     * 
-     * @param vm The VM to place
-     * @return The best host or null if no suitable host found
+     * Selects the best host from the list of suitable hosts based on minimum resource waste.
+     *
+     * @param vm The VM to allocate
+     * @param suitableHosts List of suitable hosts
+     * @return The best host or null if none found
      */
-    private Host findBestHostForVm(Vm vm) {
+    @Override
+    protected Host selectHost(Vm vm, List<Host> suitableHosts) {
+        if (suitableHosts == null || suitableHosts.isEmpty()) {
+            return null;
+        }
         Host bestHost = null;
         double minWaste = Double.MAX_VALUE;
-        int hostsChecked = 0;
-        int suitableHosts = 0;
-        
-        List<Host> hostList = getHostList();
-        logger.debug("Searching among {} hosts for VM {}", hostList.size(), vm.getId());
-        
-        for (Host host : hostList) {
-            hostsChecked++;
-            
-            // Skip if host is not suitable
-            if (!isHostSuitableForVm(host, vm)) {
-                logger.trace("Host {} not suitable for VM {} (MIPS available: {}, RAM available: {})",
-                    host.getId(), vm.getId(), 
-                    host.getMips() - host.getTotalAllocatedMips(),
-                    host.getRam().getAvailableResource());
-                continue;
-            }
-            
-            suitableHosts++;
-            
-            // Calculate resource waste
+        for (Host host : suitableHosts) {
             double waste = calculateResourceWastage(host, vm);
-            logger.trace("Host {} waste for VM {}: {:.4f}", host.getId(), vm.getId(), waste);
-            
-            // Update best host if this one has less waste
             if (waste < minWaste) {
                 minWaste = waste;
                 bestHost = host;
-                logger.trace("New best host found: Host {} with waste {:.4f}", 
-                    host.getId(), waste);
             }
         }
-        
-        logger.debug("Host search complete for VM {} - Checked: {}, Suitable: {}, Best: {}",
-            vm.getId(), hostsChecked, suitableHosts, 
-            bestHost != null ? bestHost.getId() : "none");
-        
         return bestHost;
     }
     
@@ -313,10 +293,12 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
         double availableStorage = host.getStorage().getAvailableResource();
         
         // Ensure host has minimum capacity threshold
-        if (availableMips < vm.getTotalMipsCapacity() * (1 + MIN_CAPACITY_THRESHOLD) ||
-            availableRam < vm.getRam().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD) ||
-            availableBw < vm.getBw().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD) ||
-            availableStorage < vm.getStorage().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD)) {
+        boolean mipsOk = availableMips >= vm.getTotalMipsCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
+        boolean ramOk = availableRam >= vm.getRam().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
+        boolean bwOk = availableBw >= vm.getBw().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
+        boolean storageOk = availableStorage >= vm.getStorage().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
+        
+        if (!mipsOk || !ramOk || !bwOk || !storageOk) {
             logger.trace("Host {} rejected due to insufficient capacity margin", host.getId());
             return false;
         }
@@ -339,11 +321,11 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
             // Check cache first
             Double cachedWaste = wasteCache.get(cacheKey);
             if (cachedWaste != null) {
-                cacheHits.incrementAndGet();
+                cacheHits++;
                 return cachedWaste;
             }
             
-            cacheMisses.incrementAndGet();
+            cacheMisses++;
         }
         
         ResourceWastage wastage = calculateDetailedResourceWastage(host, vm);
@@ -372,7 +354,7 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
         try {
             // Calculate CPU wastage
             double hostTotalMips = host.getTotalMipsCapacity();
-            double hostUsedMips = host.getVmScheduler().getAllocatedMips();
+            double hostUsedMips = getTotalAllocatedMips(host);
             double vmMips = vm.getTotalMipsCapacity();
             double cpuWastage = Math.max(0, hostTotalMips - (hostUsedMips + vmMips));
             
@@ -429,12 +411,12 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
         totalResourceWastage.merge("cpu", wastage.cpu, Double::sum);
         totalResourceWastage.merge("ram", wastage.ram, Double::sum);
         totalResourceWastage.merge("bw", wastage.bw, Double::sum);
-        totalResourceWastage.merge("storage", wastage.storage, Double::sum);
+        totalResourceWastage.merge(STORAGE_KEY, wastage.storage, Double::sum);
         
         resourceWastageCount.merge("cpu", 1L, Long::sum);
         resourceWastageCount.merge("ram", 1L, Long::sum);
         resourceWastageCount.merge("bw", 1L, Long::sum);
-        resourceWastageCount.merge("storage", 1L, Long::sum);
+        resourceWastageCount.merge(STORAGE_KEY, 1L, Long::sum);
     }
     
     /**
@@ -445,14 +427,11 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
      */
     private void logResourceUtilization(Host host, Vm vm) {
         try {
-            double cpuUtilization = (host.getVmScheduler().getAllocatedMips() / host.getTotalMipsCapacity()) * 100;
-            double ramUtilization = (host.getRam().getAllocatedResource() / host.getRam().getCapacity()) * 100;
-            double bwUtilization = (host.getBw().getAllocatedResource() / host.getBw().getCapacity()) * 100;
-            double storageUtilization = (host.getStorage().getAllocatedResource() / host.getStorage().getCapacity()) * 100;
-            
-            logger.debug("Host {} utilization after VM {} allocation: CPU={:.2f}%, RAM={:.2f}%, BW={:.2f}%, Storage={:.2f}%",
-                host.getId(), vm.getId(), cpuUtilization, ramUtilization, bwUtilization, storageUtilization);
-                
+            double ramUtilization = (host.getRam().getAllocatedResource() / (double) host.getRam().getCapacity()) * 100;
+            double bwUtilization = (host.getBw().getAllocatedResource() / (double) host.getBw().getCapacity()) * 100;
+            double storageUtilization = (host.getStorage().getAllocatedResource() / (double) host.getStorage().getCapacity()) * 100;
+            logger.debug("Host {} utilization after VM {} allocation: RAM={:.2f}%, BW={:.2f}%, Storage={:.2f}%",
+                host.getId(), vm.getId(), ramUtilization, bwUtilization, storageUtilization);
         } catch (Exception e) {
             logger.error("Error logging resource utilization", e);
         }
@@ -521,71 +500,18 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
     }
     
     /**
-     * Deallocates all VMs from all hosts and clears internal state.
-     * This method ensures proper cleanup of resources.
-     */
-    @Override
-    public void deallocateAllVms() {
-        logger.info("Deallocating all VMs from BestFit policy");
-        super.deallocateAllVms();
-        wasteCache.clear();
-        logger.debug("Cleared waste cache with {} entries", wasteCache.size());
-    }
-    
-    /**
      * Gets the current statistics of the BestFit algorithm.
      * 
      * @return A map containing algorithm statistics
      */
-    public Map<String, Object> getStatistics() {
-        Map<String, Object> stats = new HashMap<>();
-        
-        // Basic allocation statistics
-        long total = totalAllocations.get();
-        long successful = successfulAllocations.get();
-        stats.put("totalAllocations", total);
-        stats.put("successfulAllocations", successful);
-        stats.put("successRate", total > 0 ? (double) successful / total : 0.0);
-        
-        // Cache statistics
-        long hits = cacheHits.get();
-        long misses = cacheMisses.get();
-        stats.put("cacheEnabled", cachingEnabled);
-        stats.put("cacheHits", hits);
-        stats.put("cacheMisses", misses);
-        stats.put("cacheHitRate", (hits + misses) > 0 ? (double) hits / (hits + misses) : 0.0);
-        stats.put("currentCacheSize", wasteCache.size());
-        
-        // Timing statistics
-        stats.put("avgAllocationTime", total > 0 ? 
-            (double) totalAllocationTime.get() / total : 0.0);
-        stats.put("avgHostSearchTime", total > 0 ? 
-            (double) totalHostSearchTime.get() / total : 0.0);
-        
-        // Resource-specific wastage statistics
-        Map<String, Double> avgWastage = new HashMap<>();
-        for (String resource : Arrays.asList("cpu", "ram", "bw", "storage")) {
-            Long count = resourceWastageCount.get(resource);
-            Double totalWastage = totalResourceWastage.get(resource);
-            avgWastage.put(resource, count > 0 ? totalWastage / count : 0.0);
-        }
-        stats.put("avgResourceWastage", avgWastage);
-        
-        // Resource weights
-        Map<String, Double> weights = new HashMap<>();
-        weights.put("cpu", cpuWeight);
-        weights.put("ram", ramWeight);
-        weights.put("bw", bwWeight);
-        weights.put("storage", storageWeight);
-        stats.put("resourceWeights", weights);
-        
-        logger.info("BestFit statistics: Total: {}, Success: {} ({:.2f}%), Cache hit rate: {:.2f}%, Avg allocation time: {:.2f}ms",
-            total, successful,
-            (double) successful / Math.max(1, total) * 100,
-            (double) hits / Math.max(1, hits + misses) * 100,
-            total > 0 ? (double) totalAllocationTime.get() / total : 0.0);
-        
-        return stats;
+    @Override
+    public String getStatistics() {
+        int total = totalAllocations;
+        int successful = successfulAllocations;
+        return String.format(
+            "%s Policy Statistics: Total Attempts=%d, Successful=%d, Success Rate=%.2f%%, CacheSize=%d",
+            getName(), total, successful, total > 0 ? (double) successful / total * 100 : 0.0, wasteCache.size()
+        );
     }
     
     /**
@@ -596,10 +522,10 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
         logger.debug("Resetting BestFit allocation statistics");
         
         // Reset counters
-        totalAllocations.set(0);
-        successfulAllocations.set(0);
-        cacheHits.set(0);
-        cacheMisses.set(0);
+        successfulAllocations = 0;
+        totalAllocations = 0;
+        cacheHits = 0;
+        cacheMisses = 0;
         totalAllocationTime.set(0);
         totalHostSearchTime.set(0);
         
@@ -617,8 +543,8 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
      */
     @Override
     public String toString() {
-        long total = totalAllocations.get();
-        long successful = successfulAllocations.get();
+        int total = totalAllocations;
+        int successful = successfulAllocations;
         return String.format("BestFitAllocation[total=%d, success=%d, rate=%.2f%%, hosts=%d, caching=%s]",
             total, successful,
             total > 0 ? (double) successful / total * 100 : 0,
@@ -643,5 +569,40 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
             this.bw = bw;
             this.storage = storage;
         }
+    }
+
+    // 1. Implement defaultFindHostForVm(Vm vm)
+    @Override
+    public java.util.Optional<Host> defaultFindHostForVm(Vm vm) {
+        List<Host> suitableHosts = getHostList().stream()
+            .filter(h -> isHostSuitableForVm(h, vm))
+            .toList();
+        Host bestHost = selectHost(vm, suitableHosts);
+        return java.util.Optional.ofNullable(bestHost);
+    }
+
+    // 3. Fix getAllocatedMips() usage for total allocated MIPS
+    private double getTotalAllocatedMips(Host host) {
+        // Sums allocated MIPS for all VMs on the host
+        return host.getVmList().stream()
+            .mapToDouble(vm -> {
+                Object mips = host.getVmScheduler().getAllocatedMips(vm);
+                if (mips instanceof Number) {
+                    return ((Number) mips).doubleValue();
+                } else if (mips instanceof Iterable) {
+                    double sum = 0.0;
+                    for (Object o : (Iterable<?>) mips) {
+                        if (o instanceof Number) sum += ((Number) o).doubleValue();
+                    }
+                    return sum;
+                } else {
+                    try {
+                        return Double.parseDouble(mips.toString());
+                    } catch (Exception e) {
+                        return 0.0;
+                    }
+                }
+            })
+            .sum();
     }
 }

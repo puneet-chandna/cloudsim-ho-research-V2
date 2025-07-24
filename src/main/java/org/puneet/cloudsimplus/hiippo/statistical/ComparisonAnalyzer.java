@@ -48,7 +48,6 @@ public class ComparisonAnalyzer {
     private final List<String> metrics;
     
     // File paths
-    private static final String RESULTS_DIR = "results";
     private static final String RAW_RESULTS_FILE = "results/raw_results/main_results.csv";
     private static final String COMPARISON_OUTPUT_DIR = "results/comparison_data";
     private static final String PAIRWISE_COMPARISON_FILE = "pairwise_comparisons.csv";
@@ -119,7 +118,7 @@ public class ComparisonAnalyzer {
             
         } catch (Exception e) {
             logger.error("Error during comparison analysis", e);
-            throw new StatisticalValidationException("Comparison analysis failed: " + e.getMessage(), e);
+            throw new StatisticalValidationException(StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR, "Comparison analysis failed: " + e.getMessage(), e);
         } finally {
             // Clean up memory
             MemoryManager.checkMemoryUsage("ComparisonAnalysis-End");
@@ -268,11 +267,18 @@ public class ComparisonAnalyzer {
                     .mapToInt(group -> group.length - 1)
                     .sum();
                 
+                // Map<String, Double> groupMeans = ANOVAResult.calculateGroupMeans(data);
+                // Map<String, Double> groupStdDevs = ANOVAResult.calculateGroupStdDevs(data);
+                // Map<String, Integer> groupSizes = ANOVAResult.calculateGroupSizes(data);
+                double sumSquaresBetween = 0.0;
+                double sumSquaresWithin = 0.0;
+                
                 // Create ANOVA result
                 ANOVAResult result = new ANOVAResult(
-                    metric, fStatistic, pValue, dfBetween, dfWithin, 
-                    significant, groupLabels
-                );
+                    fStatistic, pValue, dfBetween, dfWithin,
+                    sumSquaresBetween, sumSquaresWithin,
+                    metric, groupLabels, new HashMap<>(), new HashMap<>(), new HashMap<>(),
+                    SIGNIFICANCE_LEVEL, 0L);
                 
                 anovaResults.put(metric, result);
                 
@@ -281,7 +287,7 @@ public class ComparisonAnalyzer {
                 
             } catch (Exception e) {
                 logger.error("ANOVA failed for metric: {}", metric, e);
-                throw new StatisticalValidationException("ANOVA failed for " + metric, e);
+                throw new StatisticalValidationException(StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR, "ANOVA failed for " + metric, e);
             }
         }
         
@@ -557,13 +563,13 @@ public class ComparisonAnalyzer {
             for (Map.Entry<String, ANOVAResult> entry : anovaResults.entrySet()) {
                 ANOVAResult result = entry.getValue();
                 printer.printRecord(
-                    result.getMetric(),
+                    result.getMetricName(),
                     Precision.round(result.getFStatistic(), 4),
                     Precision.round(result.getPValue(), 4),
                     result.getDfBetween(),
                     result.getDfWithin(),
                     result.isSignificant(),
-                    String.join(";", result.getGroups())
+                    String.join(";", result.getGroupNames())
                 );
             }
             

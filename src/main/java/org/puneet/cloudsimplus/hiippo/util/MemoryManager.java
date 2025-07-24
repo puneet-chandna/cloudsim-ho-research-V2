@@ -280,6 +280,18 @@ public final class MemoryManager {
     }
     
     /**
+     * Checks if there is enough memory available for the given scenario (VMs and Hosts).
+     * Delegates to ExperimentConfig.hasEnoughMemoryForScenario for estimation logic.
+     *
+     * @param vmCount Number of VMs
+     * @param hostCount Number of Hosts
+     * @return true if enough memory is available, false otherwise
+     */
+    public static boolean hasEnoughMemoryForScenario(int vmCount, int hostCount) {
+        return org.puneet.cloudsimplus.hiippo.util.ExperimentConfig.hasEnoughMemoryForScenario(vmCount, hostCount);
+    }
+    
+    /**
      * Checks memory usage and logs a warning if threshold is exceeded.
      * 
      * @param phase Current execution phase for logging context

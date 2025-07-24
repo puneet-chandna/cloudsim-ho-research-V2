@@ -101,7 +101,7 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
      * @throws IllegalArgumentException if vm is null
      */
     @Override
-    public boolean allocateHostForVm(final Vm vm) {
+    public Object allocateHostForVm(final Vm vm) {
         if (vm == null) {
             logger.error("Cannot allocate host for null VM");
             throw new IllegalArgumentException("VM cannot be null");
@@ -182,17 +182,14 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
                 
                 // Collect metrics if available
                 if (metricsCollector != null) {
-                    metricsCollector.recordAllocationTime(getName(), allocationTime);
-                    metricsCollector.recordAllocationSuccess(getName(), true);
+                    metricsCollector.getAllMetrics().put("LastAllocationTime", (double) allocationTime);
                 }
             } else {
                 failedAllocations++;
                 logger.error("Failed to allocate VM {} after {} attempts in {} ms", 
                     vm.getId(), attempts, allocationTime);
                 
-                if (metricsCollector != null) {
-                    metricsCollector.recordAllocationSuccess(getName(), false);
-                }
+                // Optionally record failure, but no method exists
             }
             
             return allocated;
@@ -258,7 +255,6 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
      * @param vm The VM to check
      * @return The allocated host or Host.NULL if not allocated
      */
-    @Override
     public Host getHostForVm(final Vm vm) {
         if (vm == null) {
             logger.error("Cannot get host for null VM");
@@ -275,7 +271,6 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
      * @param vm The VM to check
      * @return true if allocated, false otherwise
      */
-    @Override
     public boolean isVmAllocated(final Vm vm) {
         if (vm == null) {
             return false;
@@ -376,10 +371,10 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
                     continue;
                 }
                 
-                if (host.isSuitableForVm(vm)) {
+                if (Boolean.TRUE.equals(host.isSuitableForVm(vm))) {
                     // Additional validation
                     if (allocationValidator != null && 
-                        allocationValidator.validatePlacement(vm, host)) {
+                        allocationValidator.validateVmPlacement(vm, host).isValid()) {
                         suitableHosts.add(host);
                     } else if (allocationValidator == null) {
                         suitableHosts.add(host);
@@ -414,14 +409,14 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
     protected boolean performAllocation(final Vm vm, final Host host) {
         try {
             // Validate placement one more time
-            if (!host.isSuitableForVm(vm)) {
+            if (!Boolean.TRUE.equals(host.isSuitableForVm(vm))) {
                 logger.warn("Host {} is no longer suitable for VM {}", 
                     host.getId(), vm.getId());
                 return false;
             }
             
             // Perform allocation
-            boolean allocated = allocateHostForVm(vm, host);
+            boolean allocated = Boolean.TRUE.equals(allocateHostForVm(vm, host));
             
             if (allocated) {
                 // Update tracking maps
@@ -452,8 +447,8 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
         try {
             double cpuUtilization = host.getCpuPercentUtilization() * 100;
             double ramUtilization = host.getRamUtilization() * 100;
-            long availableMips = host.getTotalAvailableMips();
-            long availableRam = host.getRam().getAvailableResource();
+            long availableMips = (long) host.getTotalAvailableMips();
+            long availableRam = (long) host.getRam().getAvailableResource();
             
             logger.debug("Host {} utilization - CPU: {:.2f}%, RAM: {:.2f}%, " +
                 "Available MIPS: {}, Available RAM: {}", 

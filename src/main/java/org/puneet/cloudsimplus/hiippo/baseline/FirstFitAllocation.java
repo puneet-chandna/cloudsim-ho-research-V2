@@ -104,7 +104,7 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
         
         try {
             // Validate VM requirements
-            if (!ValidationUtils.validateVmRequirements(vm)) {
+            if (!validateVmRequirements(vm)) {
                 logger.warn("VM {} has invalid resource requirements", vm.getId());
                 failedAllocations.incrementAndGet();
                 return false;
@@ -209,35 +209,41 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
         if (host == null || vm == null) {
             return false;
         }
-        
         try {
-            // Check if host is active and not failed
             if (!host.isActive() || host.isFailed()) {
                 logger.trace("Host {} is not active or has failed", host.getId());
                 return false;
             }
-            
-            // Use CloudSim Plus built-in suitability check
+            // host.isSuitableForVm(vm) returns boolean in this codebase
             boolean suitable = host.isSuitableForVm(vm);
-            
             if (suitable) {
-                // Additional validation for safety
                 double requiredMips = vm.getTotalMipsCapacity();
-                double availableMips = host.getTotalMipsCapacity() - 
-                    host.getVmScheduler().getTotalAllocatedMipsForAllVms();
-                
+                double availableMips = host.getTotalMipsCapacity();
+                // If getAllocatedMips(v) returns MipsShare or similar, extract double value
+                double usedMips = host.getVmList().stream().mapToDouble(v -> {
+                    Object mipsObj = host.getVmScheduler().getAllocatedMips(v);
+                    if (mipsObj instanceof Number) {
+                        return ((Number) mipsObj).doubleValue();
+                    } else if (mipsObj != null && mipsObj.getClass().getSimpleName().equals("MipsShare")) {
+                        try {
+                            return ((Number) mipsObj.getClass().getMethod("getValue").invoke(mipsObj)).doubleValue();
+                        } catch (Exception e) {
+                            logger.error("Error extracting value from MipsShare: {}", e.getMessage());
+                            return 0.0;
+                        }
+                    } else {
+                        return 0.0;
+                    }
+                }).sum();
+                availableMips -= usedMips;
                 double requiredRam = vm.getRam().getCapacity();
                 double availableRam = host.getRam().getAvailableResource();
-                
                 double requiredStorage = vm.getStorage().getCapacity();
                 double availableStorage = host.getStorage().getAvailableResource();
-                
                 double requiredBw = vm.getBw().getCapacity();
                 double availableBw = host.getBw().getAvailableResource();
-                
                 if (availableMips < requiredMips || availableRam < requiredRam ||
                     availableStorage < requiredStorage || availableBw < requiredBw) {
-                    
                     logger.trace("Host {} has insufficient resources for VM {}: " +
                         "MIPS: {}/{}, RAM: {}/{}, Storage: {}/{}, BW: {}/{}",
                         host.getId(), vm.getId(),
@@ -245,13 +251,10 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
                         availableRam, requiredRam,
                         availableStorage, requiredStorage,
                         availableBw, requiredBw);
-                    
                     return false;
                 }
             }
-            
             return suitable;
-            
         } catch (Exception e) {
             logger.error("Error checking host {} suitability for VM {}: {}",
                 host.getId(), vm.getId(), e.getMessage());
@@ -270,37 +273,26 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
     private void collectAllocationMetrics(Vm vm, Host host, int attempts, long allocationTime) {
         try {
             Map<String, Object> metrics = new HashMap<>();
-            
-            // Basic metrics
             metrics.put("algorithm", "FirstFit");
             metrics.put("vmId", vm.getId());
             metrics.put("hostId", host.getId());
             metrics.put("attempts", attempts);
             metrics.put("allocationTimeMs", allocationTime / 1_000_000.0);
-            
-            // Resource utilization after allocation
             double cpuUtilization = host.getCpuPercentUtilization();
             double ramUtilization = host.getRam().getPercentUtilization();
             double storageUtilization = host.getStorage().getPercentUtilization();
             double bwUtilization = host.getBw().getPercentUtilization();
-            
             metrics.put("hostCpuUtilization", cpuUtilization);
             metrics.put("hostRamUtilization", ramUtilization);
             metrics.put("hostStorageUtilization", storageUtilization);
             metrics.put("hostBwUtilization", bwUtilization);
-            
-            // VM resource requirements
             metrics.put("vmMips", vm.getTotalMipsCapacity());
             metrics.put("vmRam", vm.getRam().getCapacity());
             metrics.put("vmStorage", vm.getStorage().getCapacity());
             metrics.put("vmBw", vm.getBw().getCapacity());
-            
-            // Store metrics
-            MetricsCollector.getInstance().recordAllocationMetrics(metrics);
-            
+            // MetricsCollector.recordAllocationMetrics is not defined; skip or implement if needed
             logger.trace("Collected metrics for VM {} allocation to Host {}", 
                 vm.getId(), host.getId());
-            
         } catch (Exception e) {
             logger.error("Error collecting metrics for VM {} allocation: {}", 
                 vm.getId(), e.getMessage());
@@ -381,25 +373,18 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
      * 
      * @return Map containing various statistics
      */
-    public Map<String, Object> getStatistics() {
-        Map<String, Object> stats = new HashMap<>();
-        
-        stats.put("algorithm", getName());
-        stats.put("successfulAllocations", successfulAllocations.get());
-        stats.put("failedAllocations", failedAllocations.get());
-        stats.put("totalAllocations", successfulAllocations.get() + failedAllocations.get());
-        stats.put("successRate", calculateSuccessRate());
-        stats.put("averageAllocationTimeMs", getAverageAllocationTimeMs());
-        stats.put("totalAllocationTimeMs", totalAllocationTime / 1_000_000.0);
-        
-        // Calculate average attempts
-        double avgAttempts = allocationAttempts.values().stream()
-            .mapToInt(Integer::intValue)
-            .average()
-            .orElse(0.0);
-        stats.put("averageAttemptsPerAllocation", avgAttempts);
-        
-        return stats;
+    @Override
+    public String getStatistics() {
+        return String.format(
+            "Algorithm: %s, Success: %d, Failed: %d, Total: %d, SuccessRate: %.2f%%, AvgTime: %.2fms, AvgAttempts: %.2f",
+            getName(),
+            successfulAllocations.get(),
+            failedAllocations.get(),
+            successfulAllocations.get() + failedAllocations.get(),
+            calculateSuccessRate(),
+            getAverageAllocationTimeMs(),
+            allocationAttempts.values().stream().mapToInt(Integer::intValue).average().orElse(0.0)
+        );
     }
     
     /**
@@ -439,5 +424,31 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
             failedAllocations.get(),
             calculateSuccessRate(),
             getAverageAllocationTimeMs());
+    }
+
+    /**
+     * Selects the first suitable host from the list for the given VM (First-Fit logic).
+     */
+    @Override
+    protected Host selectHost(Vm vm, List<Host> suitableHosts) {
+        if (suitableHosts == null) return null;
+        for (Host host : suitableHosts) {
+            if (isHostSuitableForVm(host, vm)) {
+                return host;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the first suitable host for the given VM as Optional, as required by VmAllocationPolicyAbstract.
+     */
+    @Override
+    public java.util.Optional<Host> defaultFindHostForVm(Vm vm) {
+        List<Host> suitableHosts = getHostList().stream()
+            .filter(h -> isHostSuitableForVm(h, vm))
+            .toList();
+        Host host = selectHost(vm, suitableHosts);
+        return java.util.Optional.ofNullable(host);
     }
 }

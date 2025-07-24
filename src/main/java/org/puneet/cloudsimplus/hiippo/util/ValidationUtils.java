@@ -417,15 +417,15 @@ public class ValidationUtils {
         }
         
         // Validate fitness weights (should sum to 1.0)
-        double weightSum = parameters.getUtilizationWeight() + 
-                          parameters.getPowerWeight() + 
-                          parameters.getSlaWeight();
+        double weightSum = parameters.getWeightUtilization() + 
+                          parameters.getWeightPower() + 
+                          parameters.getWeightSLA();
         
         if (Math.abs(weightSum - 1.0) > EPSILON) {
             logger.error("Fitness weights do not sum to 1.0: {} + {} + {} = {}", 
-                        parameters.getUtilizationWeight(),
-                        parameters.getPowerWeight(),
-                        parameters.getSlaWeight(),
+                        parameters.getWeightUtilization(),
+                        parameters.getWeightPower(),
+                        parameters.getWeightSLA(),
                         weightSum);
             valid = false;
         }

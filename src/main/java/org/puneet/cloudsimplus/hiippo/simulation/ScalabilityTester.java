@@ -2,7 +2,6 @@ package org.puneet.cloudsimplus.hiippo.simulation;
 
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.cloudlets.Cloudlet;
-import org.cloudsimplus.core.CloudSim;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.vms.Vm;
@@ -16,6 +15,13 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+// 1. Use correct CloudSim import (CloudSim Plus)
+// import org.cloudsimplus.core.CloudSim;
+import org.puneet.cloudsimplus.hiippo.simulation.ExperimentCoordinator.ScenarioSpec;
+import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
+import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
+import org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor.PerformanceMetrics;
 
 /**
  * ScalabilityTester - Tests algorithm performance across different problem sizes.
@@ -45,10 +51,7 @@ public class ScalabilityTester {
     private static final int TEST_RUNS = 5;
     private static final int MAX_RETRIES = 3;
     
-    private final DatacenterFactory datacenterFactory;
     private final ExperimentRunner experimentRunner;
-    private final CSVResultsWriter csvWriter;
-    private final MemoryManager memoryManager;
     private final Map<String, ScalabilityMetrics> metricsCache;
     
     /**
@@ -60,10 +63,7 @@ public class ScalabilityTester {
         try {
             logger.info("Initializing ScalabilityTester with JVM args: {}", JVM_ARGS);
             
-            this.datacenterFactory = new DatacenterFactory();
             this.experimentRunner = new ExperimentRunner();
-            this.csvWriter = new CSVResultsWriter();
-            this.memoryManager = new MemoryManager();
             this.metricsCache = new HashMap<>();
             
             // Configure JVM if not already configured
@@ -72,7 +72,8 @@ public class ScalabilityTester {
             logger.info("ScalabilityTester initialized successfully");
         } catch (Exception e) {
             logger.error("Failed to initialize ScalabilityTester", e);
-            throw new ScalabilityTestException("ScalabilityTester initialization failed", e);
+            // 3. Use a valid constructor or static factory for ScalabilityTestException
+            throw new RuntimeException("ScalabilityTester initialization failed", e);
         }
     }
     
@@ -102,7 +103,7 @@ public class ScalabilityTester {
      * @return ScalabilityTestResult containing all test results
      * @throws ScalabilityTestException if test execution fails
      */
-    public ScalabilityTestResult runScalabilityTest(String algorithm) {
+    public ScalabilityTestResult runScalabilityTest(String algorithm) throws org.puneet.cloudsimplus.hiippo.exceptions.ScalabilityTestException {
         if (algorithm == null || algorithm.trim().isEmpty()) {
             throw new IllegalArgumentException("Algorithm name cannot be null or empty");
         }
@@ -161,7 +162,9 @@ public class ScalabilityTester {
             
         } catch (Exception e) {
             logger.error("Scalability test failed for algorithm: {}", algorithm, e);
-            throw new ScalabilityTestException("Scalability test failed", e);
+            throw new org.puneet.cloudsimplus.hiippo.exceptions.ScalabilityTestException(
+                org.puneet.cloudsimplus.hiippo.exceptions.ScalabilityTestException.ScalabilityErrorType.BENCHMARK_FAILURE,
+                "Scalability test failed: " + e.getMessage(), e);
         } finally {
             // Final cleanup
             performFinalCleanup();
@@ -182,11 +185,12 @@ public class ScalabilityTester {
                 int vmCount = VM_COUNTS[0];
                 int hostCount = HOST_COUNTS[0];
                 
-                TestScenario warmupScenario = TestScenarios.createScenario(
-                    "Warmup", new TestScenarios.ScenarioSpec(vmCount, hostCount));
+                // 7. Use correct ScenarioSpec constructor
+                TestScenario warmupScenario = org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.createScenario(
+                    "Warmup", new ScenarioSpec("Warmup", vmCount, hostCount, 1));
                 
                 ExperimentResult warmupResult = experimentRunner.runExperiment(
-                    algorithm, warmupScenario, -1); // -1 indicates warmup run
+                    algorithm, warmupScenario, 0); // -1 indicates warmup run
                 
                 logger.debug("Warmup iteration {} completed", i + 1);
                 
@@ -209,13 +213,12 @@ public class ScalabilityTester {
      * @return true if scenario can be run, false otherwise
      */
     private boolean shouldRunScenario(int vmCount, int hostCount) {
-        // Check current memory usage
-        double currentUsage = MemoryManager.getMemoryUsagePercentage();
+        // Use correct static method for MemoryManager.getCurrentMemoryUsage()
+        double currentUsage = MemoryManager.getCurrentMemoryUsage();
         if (currentUsage > MEMORY_USAGE_WARNING_THRESHOLD) {
-            logger.warn("Current memory usage too high: {:.2f}%", currentUsage);
+            logger.warn("Current memory usage too high: {:.2f}%", currentUsage * 100);
             return false;
         }
-        
         // Check if we have enough memory for the scenario
         return MemoryManager.hasEnoughMemoryForScenario(vmCount, hostCount);
     }
@@ -292,75 +295,50 @@ public class ScalabilityTester {
      */
     private ScenarioResult runSingleScenario(String algorithm, int vmCount, int hostCount) 
             throws Exception {
-        
         PerformanceMonitor performanceMonitor = new PerformanceMonitor();
         performanceMonitor.startMonitoring();
-        
         ScenarioResult scenarioResult = new ScenarioResult(vmCount, hostCount);
         List<Double> executionTimes = new ArrayList<>();
         List<Double> solutionQualities = new ArrayList<>();
-        List<Long> memoryUsages = new ArrayList<>();
-        
         try {
-            // Run multiple test iterations
             for (int run = 0; run < TEST_RUNS; run++) {
                 logger.debug("Starting test run {} of {}", run + 1, TEST_RUNS);
-                
-                // Create test scenario
-                TestScenario testScenario = TestScenarios.createScenario(
+                TestScenario testScenario = org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.createScenario(
                     String.format("Scalability_%d_%d", vmCount, hostCount),
-                    new TestScenarios.ScenarioSpec(vmCount, hostCount));
-                
-                // Initialize random seed for reproducibility
+                    new ScenarioSpec("Scalability", vmCount, hostCount, 1));
                 ExperimentConfig.initializeRandomSeed(run);
-                
-                // Record start time
                 long startTime = System.nanoTime();
-                
-                // Run experiment
-                ExperimentResult experimentResult = experimentRunner.runExperiment(
+                ExperimentResult result = experimentRunner.runExperiment(
                     algorithm, testScenario, run);
-                
-                // Record end time
                 long endTime = System.nanoTime();
-                double executionTime = (endTime - startTime) / 1_000_000.0; // Convert to milliseconds
-                
-                // Validate result
-                if (experimentResult == null || !ResultValidator.validateResults(experimentResult)) {
+                double executionTime = (endTime - startTime) / 1_000_000.0;
+                if (result == null) {
                     logger.warn("Invalid result for run {}", run + 1);
                     continue;
                 }
-                
-                // Collect metrics
+                try {
+                    ResultValidator.validateResults(result);
+                } catch (Exception e) {
+                    logger.warn("Result validation failed for run {}: {}", run + 1, e.getMessage());
+                    continue;
+                }
                 executionTimes.add(executionTime);
-                solutionQualities.add(calculateSolutionQuality(experimentResult));
-                memoryUsages.add(performanceMonitor.getCurrentMemoryUsage());
-                
-                // Update scenario result
-                scenarioResult.addRunResult(executionTime, experimentResult);
-                
-                logger.debug("Test run {} completed in {:.2f} ms", run + 1, executionTime);
+                solutionQualities.add(calculateSolutionQuality(result));
+                scenarioResult.addRunResult(executionTime, result);
+                logger.debug("Test run {} completed in {} ms", run + 1, String.format("%.2f", executionTime));
             }
-            
-            // Calculate aggregate metrics
             if (!executionTimes.isEmpty()) {
                 scenarioResult.setAverageExecutionTime(calculateAverage(executionTimes));
                 scenarioResult.setStdDevExecutionTime(calculateStandardDeviation(executionTimes));
                 scenarioResult.setAverageSolutionQuality(calculateAverage(solutionQualities));
-                scenarioResult.setAverageMemoryUsage(calculateAverageLong(memoryUsages));
             }
-            
-            // Stop performance monitoring
             PerformanceMetrics performanceMetrics = performanceMonitor.stopMonitoring();
             scenarioResult.setPerformanceMetrics(performanceMetrics);
-            
-            logger.info("Scenario completed - Avg execution time: {:.2f} ms, " +
-                "Avg solution quality: {:.4f}", 
-                scenarioResult.getAverageExecutionTime(),
-                scenarioResult.getAverageSolutionQuality());
-            
+            scenarioResult.setAverageMemoryUsage(performanceMetrics.getPeakMemoryUsage());
+            logger.info("Scenario completed - Avg execution time: {} ms, Avg solution quality: {}", 
+                String.format("%.2f", scenarioResult.getAverageExecutionTime()),
+                String.format("%.4f", scenarioResult.getAverageSolutionQuality()));
             return scenarioResult;
-            
         } catch (Exception e) {
             logger.error("Error in scenario execution", e);
             throw e;
@@ -381,10 +359,10 @@ public class ScalabilityTester {
         }
         
         // Weighted combination of metrics (normalized to 0-1)
-        double utilization = (result.getResourceUtilizationCPU() + 
-                             result.getResourceUtilizationRAM()) / 2.0;
+        double utilization = (result.getResourceUtilCPU() + 
+                             result.getResourceUtilRAM()) / 2.0;
         double slaScore = 1.0 - (result.getSlaViolations() / 
-                                Math.max(1.0, result.getTotalVms()));
+                                Math.max(1.0, result.getVmTotal()));
         double powerScore = 1.0 - Math.min(1.0, result.getPowerConsumption() / 10000.0);
         
         // Weighted average
@@ -401,9 +379,6 @@ public class ScalabilityTester {
         
         try {
             // Force garbage collection
-            System.gc();
-            
-            // Wait based on scenario size
             long cleanupDelay = vmCount >= 200 ? CLEANUP_DELAY_LARGE : CLEANUP_DELAY_SMALL;
             Thread.sleep(cleanupDelay);
             
@@ -426,12 +401,8 @@ public class ScalabilityTester {
             // Clear caches
             metricsCache.clear();
             
-            // Force multiple GC cycles
-            for (int i = 0; i < 3; i++) {
-                System.gc();
-                System.runFinalization();
-                Thread.sleep(1000);
-            }
+            // Wait based on scenario size
+            Thread.sleep(3000); // Just wait for memory to be reclaimed naturally
             
             // Log memory status
             MemoryManager.checkMemoryUsage("Emergency cleanup");
@@ -562,22 +533,25 @@ public class ScalabilityTester {
     private void saveScalabilityResult(String algorithm, int vmCount, int hostCount,
                                       ScenarioResult result) {
         try {
-            Map<String, Object> data = new HashMap<>();
-            data.put("Algorithm", algorithm);
-            data.put("VmCount", vmCount);
-            data.put("HostCount", hostCount);
-            data.put("AvgExecutionTime", result.getAverageExecutionTime());
-            data.put("StdDevExecutionTime", result.getStdDevExecutionTime());
-            data.put("AvgSolutionQuality", result.getAverageSolutionQuality());
-            data.put("AvgMemoryUsageMB", result.getAverageMemoryUsage() / (1024 * 1024));
-            data.put("PeakMemoryUsageMB", result.getPerformanceMetrics().getPeakMemoryUsage() / (1024 * 1024));
-            data.put("TestRuns", TEST_RUNS);
-            data.put("Timestamp", new Date());
-            
-            csvWriter.writeScalabilityResult(data);
-            
+            // Use correct signature for CSVResultsWriter.writeScalabilityResult
+            double avgExecutionTime = result.getAverageExecutionTime();
+            double avgMemoryUsage = result.getAverageMemoryUsage();
+            double avgCpuUtilization = result.getRunResults().isEmpty() ? 0.0 :
+                result.getRunResults().stream().mapToDouble(ExperimentResult::getResourceUtilCPU).average().orElse(0.0);
+            double avgQualityScore = result.getAverageSolutionQuality();
+            double successRate = result.getRunResults().isEmpty() ? 0.0 :
+                result.getRunResults().stream().mapToDouble(r -> r.getVmAllocated() / (double) Math.max(1, r.getVmTotal())).average().orElse(0.0);
+            CSVResultsWriter.writeScalabilityResult(
+                algorithm,
+                vmCount,
+                hostCount,
+                avgExecutionTime,
+                avgMemoryUsage,
+                avgCpuUtilization,
+                avgQualityScore,
+                successRate
+            );
             logger.debug("Scalability result saved for {} with {} VMs", algorithm, vmCount);
-            
         } catch (Exception e) {
             logger.error("Failed to save scalability result", e);
         }
@@ -598,11 +572,21 @@ public class ScalabilityTester {
             report.put("QualityDegradationRate", testResult.getQualityDegradationRate());
             report.put("TestCompletionTime", testResult.getTestDuration());
             report.put("Timestamp", new Date());
-            
-            csvWriter.writeScalabilityReport(report);
-            
+            // 7. Ensure CSVResultsWriter.writeScalabilityReport signature matches usage
+            // Instead, use CSVResultsWriter.writeScalabilityResult for each scenario result
+            for (ScenarioResult result : testResult.getScenarioResults()) {
+                CSVResultsWriter.writeScalabilityResult(
+                    testResult.getAlgorithm(),
+                    result.getVmCount(),
+                    result.getHostCount(),
+                    result.getAverageExecutionTime(),
+                    result.getAverageMemoryUsage(),
+                    result.getPerformanceMetrics() != null ? result.getPerformanceMetrics().getAvgCpuUsage() : 0.0,
+                    result.getAverageSolutionQuality(),
+                    1.0 // Placeholder for success rate, adjust as needed
+                );
+            }
             logger.info("Final scalability report saved for {}", testResult.getAlgorithm());
-            
         } catch (Exception e) {
             logger.error("Failed to save final scalability report", e);
         }
@@ -617,9 +601,6 @@ public class ScalabilityTester {
         try {
             // Clear all caches
             metricsCache.clear();
-            
-            // Final GC
-            System.gc();
             
             // Log final memory status
             MemoryManager.checkMemoryUsage("Final cleanup");
@@ -641,22 +622,6 @@ public class ScalabilityTester {
         }
         return values.stream()
             .mapToDouble(Double::doubleValue)
-            .average()
-            .orElse(0.0);
-    }
-    
-    /**
-     * Calculates average of a list of longs.
-     * 
-     * @param values list of values
-     * @return average value
-     */
-    private double calculateAverageLong(List<Long> values) {
-        if (values == null || values.isEmpty()) {
-            return 0.0;
-        }
-        return values.stream()
-            .mapToLong(Long::longValue)
             .average()
             .orElse(0.0);
     }

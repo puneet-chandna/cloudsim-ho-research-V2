@@ -596,7 +596,10 @@ public class CSVResultsWriter {
         private final int convergenceIterations;
         private final int vmAllocated;
         private final int vmTotal;
-        
+        // Add for validation only (not for CSV):
+        private List<org.cloudsimplus.vms.Vm> vms;
+        private List<org.cloudsimplus.hosts.Host> hosts;
+
         public ExperimentResult(String algorithm, String scenario, int replication,
                               double resourceUtilCPU, double resourceUtilRAM,
                               double powerConsumption, int slaViolations,
@@ -613,8 +616,21 @@ public class CSVResultsWriter {
             this.convergenceIterations = convergenceIterations;
             this.vmAllocated = vmAllocated;
             this.vmTotal = vmTotal;
+            this.vms = null;
+            this.hosts = null;
         }
-        
+        // Overloaded constructor for validation
+        public ExperimentResult(String algorithm, String scenario, int replication,
+                              double resourceUtilCPU, double resourceUtilRAM,
+                              double powerConsumption, int slaViolations,
+                              double executionTime, int convergenceIterations,
+                              int vmAllocated, int vmTotal,
+                              List<org.cloudsimplus.vms.Vm> vms,
+                              List<org.cloudsimplus.hosts.Host> hosts) {
+            this(algorithm, scenario, replication, resourceUtilCPU, resourceUtilRAM, powerConsumption, slaViolations, executionTime, convergenceIterations, vmAllocated, vmTotal);
+            this.vms = vms;
+            this.hosts = hosts;
+        }
         // Getters
         public String getAlgorithm() { return algorithm; }
         public String getScenario() { return scenario; }
@@ -627,5 +643,10 @@ public class CSVResultsWriter {
         public int getConvergenceIterations() { return convergenceIterations; }
         public int getVmAllocated() { return vmAllocated; }
         public int getVmTotal() { return vmTotal; }
+        // Validation only
+        public List<org.cloudsimplus.vms.Vm> getVms() { return vms; }
+        public List<org.cloudsimplus.hosts.Host> getHosts() { return hosts; }
+        public void setVms(List<org.cloudsimplus.vms.Vm> vms) { this.vms = vms; }
+        public void setHosts(List<org.cloudsimplus.hosts.Host> hosts) { this.hosts = hosts; }
     }
 }

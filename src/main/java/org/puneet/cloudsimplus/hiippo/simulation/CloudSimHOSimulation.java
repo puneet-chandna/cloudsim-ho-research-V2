@@ -3,7 +3,7 @@ package org.puneet.cloudsimplus.hiippo.simulation;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.cloudlets.Cloudlet;
 import org.cloudsimplus.cloudlets.CloudletSimple;
-import org.cloudsimplus.core.CloudSimPlus;
+import org.cloudsimplus.core.CloudSim;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.resources.Pe;
@@ -36,6 +36,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
+import org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor.PerformanceMetrics;
+import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
+
 /**
  * Main CloudSim Plus simulation orchestrator for Hippopotamus Optimization experiments.
  * Handles simulation setup, execution, and metrics collection with memory-efficient processing.
@@ -47,7 +51,7 @@ import java.util.stream.IntStream;
 public class CloudSimHOSimulation {
     private static final Logger logger = LoggerFactory.getLogger(CloudSimHOSimulation.class);
     
-    private final CloudSimPlus simulation;
+    private final CloudSim simulation;
     private final String algorithmName;
     private final TestScenario testScenario;
     private final int replicationNumber;
@@ -85,7 +89,7 @@ public class CloudSimHOSimulation {
         this.replicationNumber = replicationNumber;
         
         // Initialize CloudSim Plus with deterministic seed
-        this.simulation = new CloudSimPlus();
+        this.simulation = new CloudSim();
         
         this.metricsCollector = new MetricsCollector();
         this.performanceMonitor = new PerformanceMonitor();
@@ -186,7 +190,7 @@ public class CloudSimHOSimulation {
         logger.debug("Creating datacenter with {} hosts", testScenario.getHostCount());
         
         // Create hosts using DatacenterFactory
-        hostList = DatacenterFactory.createHosts(testScenario);
+        hostList = DatacenterFactory.createHosts(simulation, testScenario.getHostCount());
         
         if (hostList == null || hostList.isEmpty()) {
             throw new ValidationException("Failed to create hosts for datacenter");
@@ -241,12 +245,7 @@ public class CloudSimHOSimulation {
                 throw new ValidationException("Unknown algorithm: " + algorithmName);
         }
         
-        // Set host list for the policy
-        if (policy instanceof BaselineVmAllocationPolicy) {
-            ((BaselineVmAllocationPolicy) policy).setHostList(hostList);
-        } else if (policy instanceof HippopotamusVmAllocationPolicy) {
-            ((HippopotamusVmAllocationPolicy) policy).setHostList(hostList);
-        }
+        // Remove setHostList calls
         
         return policy;
     }
@@ -333,20 +332,20 @@ public class CloudSimHOSimulation {
         // Process VMs in batches for memory efficiency
         if (enableMemoryMonitoring && testScenario.getVmCount() > 100) {
             BatchProcessor.processBatches(
-                testScenario.getVmSpecifications(),
+                testScenario.getVms(),
                 batch -> {
-                    for (VmSpecification vmSpec : batch) {
-                        Vm vm = createVmFromSpec(vmSpec);
-                        vmList.add(vm);
+                    for (Vm vm : batch) {
+                        Vm vmCreated = createVmFromSpec(vm);
+                        vmList.add(vmCreated);
                     }
                 },
                 50 // Process 50 VMs at a time
             );
         } else {
             // Create all VMs at once for small scenarios
-            for (VmSpecification vmSpec : testScenario.getVmSpecifications()) {
-                Vm vm = createVmFromSpec(vmSpec);
-                vmList.add(vm);
+            for (Vm vm : testScenario.getVms()) {
+                Vm vmCreated = createVmFromSpec(vm);
+                vmList.add(vmCreated);
             }
         }
         
@@ -356,18 +355,16 @@ public class CloudSimHOSimulation {
     /**
      * Creates a single VM from specification.
      */
-    private Vm createVmFromSpec(VmSpecification vmSpec) {
-        Vm vm = new VmSimple(vmSpec.getId(), vmSpec.getMips(), vmSpec.getPesNumber());
+    private Vm createVmFromSpec(Vm vm) {
+        Vm vmCreated = new VmSimple(vm.getId(), vm.getMips(), vm.getPesNumber());
         
-        vm.setRam(vmSpec.getRam())
-          .setBw(vmSpec.getBw())
-          .setSize(vmSpec.getSize())
+        vmCreated.setRam(vm.getRam())
+          .setBw(vm.getBw())
+          .setSize(vm.getSize())
           .setCloudletScheduler(new CloudletSchedulerTimeShared());
         
-        // Set description for tracking
-        vm.setDescription(String.format("VM_%d_%s", vmSpec.getId(), vmSpec.getType()));
-        
-        return vm;
+        // Remove setDescription with getType, unless you have a custom property
+        return vmCreated;
     }
     
     /**
@@ -422,7 +419,7 @@ public class CloudSimHOSimulation {
         
         // Monitor simulation clock for memory checks
         if (enableMemoryMonitoring) {
-            simulation.addOnClockTickListener(this::onClockTick);
+            simulation.addOnClockTickListener(event -> checkMemoryUsage());
         }
         
         // Monitor datacenter events
@@ -523,7 +520,9 @@ public class CloudSimHOSimulation {
             executionTime,
             convergenceIterations,
             allocatedVms,
-            totalVms
+            totalVms,
+            vmList,
+            hostList
         );
         
         // Add additional metrics

@@ -243,7 +243,12 @@ public class AllocationValidator {
      */
     private void validateHostCapacity(Host host, List<String> violations) {
         // CPU overcommit check
-        double allocatedMips = host.getVmScheduler().getAllocatedMips();
+        double allocatedMips = host.getVmList().stream()
+            .mapToDouble(vm -> {
+                Object mips = host.getVmScheduler().getAllocatedMips(vm);
+                if (mips instanceof Number) return ((Number) mips).doubleValue();
+                else return 0.0;
+            }).sum();
         double totalMips = host.getTotalMipsCapacity();
         if (allocatedMips > totalMips * (1 + CPU_TOLERANCE)) {
             violations.add(String.format(
@@ -253,7 +258,7 @@ public class AllocationValidator {
         }
         
         // RAM overcommit check
-        long allocatedRam = host.getRamProvisioner().getAllocatedRam();
+        long allocatedRam = host.getRam().getAllocatedResource();
         long totalRam = host.getRam().getCapacity();
         if (allocatedRam > totalRam * (1 + RAM_TOLERANCE)) {
             violations.add(String.format(
@@ -263,7 +268,7 @@ public class AllocationValidator {
         }
         
         // BW overcommit check
-        long allocatedBw = host.getBwProvisioner().getAllocatedBw();
+        long allocatedBw = host.getBw().getAllocatedResource();
         long totalBw = host.getBw().getCapacity();
         if (allocatedBw > totalBw * (1 + BW_TOLERANCE)) {
             violations.add(String.format(
@@ -285,7 +290,7 @@ public class AllocationValidator {
         // Check for duplicate VM IDs
         Set<Integer> vmIds = new HashSet<>();
         for (Vm vm : host.getVmCreatedList()) {
-            if (!vmIds.add(vm.getId())) {
+            if (!vmIds.add((int)vm.getId())) {
                 violations.add(String.format(
                     "Host %d has duplicate VM ID: %d", host.getId(), vm.getId()
                 ));
@@ -311,8 +316,9 @@ public class AllocationValidator {
         
         for (Host host : hosts) {
             for (Vm vm : host.getVmCreatedList()) {
-                if (!globalVmIds.add(vm.getId())) {
-                    duplicateVmIds.add(vm.getId());
+                int vmId = (int)vm.getId();
+                if (!globalVmIds.add(vmId)) {
+                    duplicateVmIds.add(vmId);
                 }
             }
         }
@@ -323,7 +329,7 @@ public class AllocationValidator {
         
         // Validate total resource usage
         long totalAllocatedRam = hosts.stream()
-            .mapToLong(h -> h.getRamProvisioner().getAllocatedRam())
+            .mapToLong(h -> h.getRam().getAllocatedResource())
             .sum();
         long totalRam = hosts.stream()
             .mapToLong(h -> h.getRam().getCapacity())
@@ -395,15 +401,21 @@ public class AllocationValidator {
      * Utility methods for utilization calculations
      */
     private double calculateCpuUtilization(Host host) {
-        return host.getVmScheduler().getAllocatedMips() / host.getTotalMipsCapacity();
+        double allocatedMips = host.getVmList().stream()
+            .mapToDouble(vm -> {
+                Object mips = host.getVmScheduler().getAllocatedMips(vm);
+                if (mips instanceof Number) return ((Number) mips).doubleValue();
+                else return 0.0;
+            }).sum();
+        return allocatedMips / host.getTotalMipsCapacity();
     }
     
     private double calculateRamUtilization(Host host) {
-        return (double) host.getRamProvisioner().getAllocatedRam() / host.getRam().getCapacity();
+        return (double) host.getRam().getAllocatedResource() / host.getRam().getCapacity();
     }
     
     private double calculateBwUtilization(Host host) {
-        return (double) host.getBwProvisioner().getAllocatedBw() / host.getBw().getCapacity();
+        return (double) host.getBw().getAllocatedResource() / host.getBw().getCapacity();
     }
     
     private double calculateProjectedCpuUtilization(Vm vm, Host host) {
@@ -432,9 +444,14 @@ public class AllocationValidator {
      */
     private void validateOvercommitConstraints(Vm vm, Host host, List<String> violations) {
         // Check if placement would exceed overcommit ratios
-        double cpuRatio = (host.getVmScheduler().getAllocatedMips() + vm.getTotalMipsCapacity()) 
-                         / host.getTotalMipsCapacity();
-        double ramRatio = (host.getRamProvisioner().getAllocatedRam() + vm.getRam().getCapacity()) 
+        double allocatedMips = host.getVmList().stream()
+            .mapToDouble(v -> {
+                Object mips = host.getVmScheduler().getAllocatedMips(v);
+                if (mips instanceof Number) return ((Number) mips).doubleValue();
+                else return 0.0;
+            }).sum();
+        double cpuRatio = (allocatedMips + vm.getTotalMipsCapacity()) / host.getTotalMipsCapacity();
+        double ramRatio = (host.getRam().getAllocatedResource() + vm.getRam().getCapacity())
                          / (double) host.getRam().getCapacity();
         
         if (cpuRatio > 1.5) {

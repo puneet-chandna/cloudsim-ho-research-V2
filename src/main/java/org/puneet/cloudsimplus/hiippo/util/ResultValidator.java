@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
 
 /**
  * Validates experiment results for correctness and statistical validity.

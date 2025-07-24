@@ -1,57 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
-
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
-
-  <groupId>org.puneet.cloudsimplus.hiippo</groupId>
-  <artifactId>cloudsim-ho-research-v2</artifactId>
-  <version>1.0-SNAPSHOT</version>
-  <name>cloudsim-ho-research-v2</name>
-    <description>A research-grade framework for implementing and evaluating the 
-    Hippopotamus Optimization algorithm for VM placement in CloudSim Plus.</description>
-
-  
-  <!-- FIXME change it to the project's website -->
-  <!-- <url>http://www.example.com</url> -->
-
-  <properties>
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-
-    <cloudsimplus.version>8.0.0</cloudsimplus.version>
-     <!-- Core Dependencies Versions -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <groupId>org.puneet.cloudsimplus.hiippo</groupId>
+    <artifactId>cloudsim-ho-research-v2</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <cloudsimplus.version>8.0.0</cloudsimplus.version>
         <commons.math3.version>3.6.1</commons.math3.version>
         <commons.csv.version>1.9.0</commons.csv.version>
-        <commons.statistics.version>1.0</commons.statistics.version>
-        
-        <!-- Logging Dependencies Versions -->
-        <slf4j.version>2.0.7</slf4j.version>
         <logback.version>1.4.8</logback.version>
-        
-        <!-- Testing Dependencies Versions -->
-        <junit.jupiter.version>5.9.3</junit.jupiter.version>
-        <assertj.version>3.24.2</assertj.version>
-        <mockito.version>5.3.1</mockito.version>
-        
-        <!-- Plugin Versions -->
-        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
-        <maven.surefire.plugin.version>3.0.0-M7</maven.surefire.plugin.version>
-        <maven.failsafe.plugin.version>3.0.0-M7</maven.failsafe.plugin.version>
-        <exec.maven.plugin.version>3.1.0</exec.maven.plugin.version>
-        <maven.jar.plugin.version>3.3.0</maven.jar.plugin.version>
-        <maven.shade.plugin.version>3.4.1</maven.shade.plugin.version>
-        
-        <!-- JVM Configuration -->
-        <argLine>-Xmx3G -XX:+UseG1GC -XX:MaxGCPauseMillis=200</argLine>
-  </properties>
+        <junit.version>5.9.3</junit.version>
+    </properties>
     
-
-  <dependencies>
-    <dependency>
+    <dependencies>
+        <!-- CloudSim Plus -->
+        <dependency>
             <groupId>org.cloudsimplus</groupId>
             <artifactId>cloudsim-plus</artifactId>
             <version>${cloudsimplus.version}</version>
@@ -64,299 +36,90 @@
             <version>${commons.math3.version}</version>
         </dependency>
         
-        <!-- Apache Commons CSV (Data Export) -->
+        <!-- Apache Commons CSV -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
             <version>${commons.csv.version}</version>
         </dependency>
         
-        <!-- Apache Commons Statistics (Advanced Statistics) -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-statistics-descriptive</artifactId>
-            <version>${commons.statistics.version}</version>
-        </dependency>
-        
         <!-- SLF4J API -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
+            <version>2.0.7</version>
         </dependency>
         
-        <!-- Logback Classic (SLF4J Implementation) -->
+        <!-- Logback Classic -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
         </dependency>
         
-        <!-- Logback Core -->
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
-            <version>${logback.version}</version>
-        </dependency>
-        
-        <!-- JUnit Jupiter API (Testing) -->
+        <!-- JUnit Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.jupiter.version}</version>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
         
-        <!-- JUnit Jupiter Engine (Testing) -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-engine</artifactId>
-            <version>${junit.jupiter.version}</version>
-            <scope>test</scope>
-        </dependency>
-        
-        <!-- JUnit Jupiter Params (Parameterized Tests) -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-params</artifactId>
-            <version>${junit.jupiter.version}</version>
-            <scope>test</scope>
-        </dependency>
-        
-        <!-- AssertJ Core (Advanced Assertions) -->
+        <!-- AssertJ for Advanced Testing -->
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>${assertj.version}</version>
+            <version>3.24.2</version>
             <scope>test</scope>
         </dependency>
-        
-        <!-- Mockito (Mocking Framework) -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
-        </dependency>
-        
-        <!-- Mockito JUnit Jupiter Integration -->
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <version>${mockito.version}</version>
-            <scope>test</scope>
-        </dependency>
-  </dependencies>
-
-  <build>
-    <finalName>${project.artifactId}-${project.version}</finalName>
-    <pluginManagement><!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) -->
-       <sourceDirectory>src/main/java</sourceDirectory>
-        <testSourceDirectory>src/test/java</testSourceDirectory>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
-        <testResources>
-            <testResource>
-                <directory>src/test/resources</directory>
-                <filtering>true</filtering>
-            </testResource>
-        </testResources>
-        
-        <!-- Plugins -->
+    </dependencies>
+    
+    <build>
         <plugins>
-            <!-- Maven Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>${maven.compiler.plugin.version}</version>
+                <version>3.11.0</version>
                 <configuration>
                     <source>21</source>
                     <target>21</target>
-                    <release>21</release>
-                    <encoding>${project.build.sourceEncoding}</encoding>
                     <compilerArgs>
                         <arg>-parameters</arg>
-                        <arg>-Xlint:all</arg>
-                        <arg>-Xlint:-processing</arg>
                     </compilerArgs>
-                    <showWarnings>true</showWarnings>
-                    <showDeprecation>true</showDeprecation>
                 </configuration>
             </plugin>
             
-            <!-- Maven Surefire Plugin (Unit Tests) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>${maven.surefire.plugin.version}</version>
+                <version>3.0.0-M7</version>
                 <configuration>
-                    <argLine>${argLine}</argLine>
+                    <argLine>-Xmx3G</argLine>
                     <parallel>methods</parallel>
                     <threadCount>2</threadCount>
-                    <forkCount>1</forkCount>
-                    <reuseForks>true</reuseForks>
-                    <includes>
-                        <include>**/*Test.java</include>
-                        <include>**/*Tests.java</include>
-                    </includes>
-                    <excludes>
-                        <exclude>**/integration/**</exclude>
-                        <exclude>**/performance/**</exclude>
-                    </excludes>
-                    <systemPropertyVariables>
-                        <java.util.logging.manager>org.slf4j.bridge.SLF4JBridgeHandler</java.util.logging.manager>
-                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             
-            <!-- Maven Failsafe Plugin (Integration Tests) -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <version>${maven.failsafe.plugin.version}</version>
-                <configuration>
-                    <argLine>${argLine}</argLine>
-                    <includes>
-                        <include>**/integration/**/*Test.java</include>
-                        <include>**/performance/**/*Test.java</include>
-                    </includes>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            
-            <!-- Exec Maven Plugin (Run Main Class) -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
-                <version>${exec.maven.plugin.version}</version>
+                <version>3.1.0</version>
                 <configuration>
-                    <mainClass>org.cloudsimplus.ho.App</mainClass>
+                    <mainClass>org.puneet.cloudsimplus.hiippo.App</mainClass>
                     <commandlineArgs>-Xmx6G -XX:+UseG1GC -XX:MaxGCPauseMillis=200</commandlineArgs>
-                    <systemProperties>
-                        <systemProperty>
-                            <key>java.util.logging.manager</key>
-                            <value>org.slf4j.bridge.SLF4JBridgeHandler</value>
-                        </systemProperty>
-                    </systemProperties>
                 </configuration>
-            </plugin>
-            
-            <!-- Maven JAR Plugin -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <version>${maven.jar.plugin.version}</version>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <addClasspath>true</addClasspath>
-                            <classpathPrefix>lib/</classpathPrefix>
-                            <mainClass>org.cloudsimplus.ho.App</mainClass>
-                        </manifest>
-                        <manifestEntries>
-                            <Built-By>${user.name}</Built-By>
-                            <Implementation-Title>${project.name}</Implementation-Title>
-                            <Implementation-Version>${project.version}</Implementation-Version>
-                            <Implementation-Vendor>CloudSim Plus HO Research Team</Implementation-Vendor>
-                        </manifestEntries>
-                    </archive>
-                </configuration>
-            </plugin>
-            
-            <!-- Maven Shade Plugin (Fat JAR with all dependencies) -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>${maven.shade.plugin.version}</version>
-                <configuration>
-                    <createDependencyReducedPom>false</createDependencyReducedPom>
-                    <filters>
-                        <filter>
-                            <artifact>*:*</artifact>
-                            <excludes>
-                                <exclude>META-INF/*.SF</exclude>
-                                <exclude>META-INF/*.DSA</exclude>
-                                <exclude>META-INF/*.RSA</exclude>
-                            </excludes>
-                        </filter>
-                    </filters>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>org.cloudsimplus.ho.App</mainClass>
-                                </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                            </transformers>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
-    </pluginManagement>
-  </build>
-  <profiles>
-        <!-- Development Profile -->
-        <profile>
-            <id>dev</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <properties>
-                <log.level>DEBUG</log.level>
-            </properties>
-        </profile>
         
-        <!-- Production Profile -->
-        <profile>
-            <id>prod</id>
-            <properties>
-                <log.level>INFO</log.level>
-            </properties>
-        </profile>
-        
-        <!-- Performance Testing Profile -->
-        <profile>
-            <id>perf</id>
-            <properties>
-                <argLine>-Xmx8G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+PrintGCDetails</argLine>
-            </properties>
-        </profile>
-    </profiles>
-    
-    <!-- Reporting -->
-    <reporting>
-        <plugins>
-            <!-- Maven Surefire Report Plugin -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-report-plugin</artifactId>
-                <version>${maven.surefire.plugin.version}</version>
-            </plugin>
-            
-            <!-- Maven Project Info Reports Plugin -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-project-info-reports-plugin</artifactId>
-                <version>3.4.3</version>
-            </plugin>
-        </plugins>
-    </reporting>
+        <!-- Resources configuration goes inside build -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>**/*.properties</include>
+                    <include>**/*.xml</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
 </project>

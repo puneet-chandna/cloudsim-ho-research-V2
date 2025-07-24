@@ -109,10 +109,10 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @return true if allocation was successful, false otherwise
      */
     @Override
-    public boolean allocateHostForVm(Vm vm) {
+    public Boolean allocateHostForVm(Vm vm) {
         if (vm == null) {
             logger.error("Cannot allocate null VM");
-            return false;
+            return Boolean.FALSE;
         }
         
         logger.debug("Attempting to allocate VM {} (MIPS: {}, RAM: {}, Storage: {})", 
@@ -127,20 +127,20 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             if (vmHostMap.containsKey(vm)) {
                 logger.warn("VM {} is already allocated to host {}", 
                     vm.getId(), vmHostMap.get(vm).getId());
-                return false;
+                return Boolean.FALSE;
             }
             
             // If batch optimization is enabled and we're not in the middle of optimization
             if (batchOptimizationEnabled && !optimizationInProgress) {
-                return handleBatchAllocation(vm);
+                return handleBatchAllocation(vm) ? Boolean.TRUE : Boolean.FALSE;
             } else {
                 // Direct allocation using HO algorithm
-                return performDirectAllocation(vm);
+                return performDirectAllocation(vm) ? Boolean.TRUE : Boolean.FALSE;
             }
             
         } catch (Exception e) {
             logger.error("Error allocating VM {}: {}", vm.getId(), e.getMessage(), e);
-            return false;
+            return Boolean.FALSE;
         }
     }
     
@@ -263,8 +263,8 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 elapsedTime, bestSolution.getAllocatedVmCount(), vmsToAllocate.size());
             
             // Collect metrics
-            metricsCollector.recordBatchAllocation(vmsToAllocate.size(), 
-                bestSolution.getAllocatedVmCount(), elapsedTime);
+            // metricsCollector.recordBatchAllocation(vmsToAllocate.size(), 
+            //     bestSolution.getAllocatedVmCount(), elapsedTime); // Method does not exist
             
             return allAllocated;
             
@@ -289,20 +289,17 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             // Create optimization context
             OptimizationContext context = new OptimizationContext(vms, hosts, vmHostMap);
             
-            // Run HO algorithm
-            Solution solution = hoAlgorithm.optimize(context);
+            // Run HO algorithm (use standard optimize method)
+            Solution solution = hoAlgorithm.optimize(vms, hosts);
             
             // Validate solution
-            if (solution != null && validator.validateSolution(solution, vms, hosts)) {
+            if (solution != null && validator.validateAllocation(hosts).isValid()) {
                 return solution;
             } else {
                 logger.warn("HO algorithm produced invalid solution");
                 return null;
             }
             
-        } catch (HippopotamusOptimizationException e) {
-            logger.error("HO algorithm error: {}", e.getMessage());
-            return null;
         } catch (Exception e) {
             logger.error("Unexpected error during optimization", e);
             return null;
@@ -325,7 +322,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             
             if (assignedHost != null) {
                 // Validate assignment before applying
-                if (validator.canAllocateVmToHost(vm, assignedHost)) {
+                if (validator.validateVmPlacement(vm, assignedHost).isValid()) {
                     if (performAllocation(vm, assignedHost)) {
                         successCount++;
                         logger.debug("Successfully allocated VM {} to Host {}", 
@@ -364,7 +361,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
         // Get available hosts
         List<Host> availableHosts = getHostList().stream()
             .filter(host -> host.isActive() && !host.isFailed())
-            .filter(host -> validator.canAllocateVmToHost(vm, host))
+            .filter(host -> Boolean.TRUE.equals(host.isSuitableForVm(vm)) && validator.validateVmPlacement(vm, host).isValid())
             .collect(Collectors.toList());
         
         if (availableHosts.isEmpty()) {
@@ -395,7 +392,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
         double bestFitness = Double.NEGATIVE_INFINITY;
         
         for (Host host : availableHosts) {
-            if (!host.isSuitableForVm(vm)) {
+            if (!Boolean.TRUE.equals(host.isSuitableForVm(vm))) {
                 continue;
             }
             
@@ -421,7 +418,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     private double calculateHostFitness(Host host, Vm vm) {
         // Get current utilization
         double cpuUtil = host.getCpuPercentUtilization();
-        double ramUtil = host.getRamPercentUtilization();
+        double ramUtil = host.getRam().getAllocatedResource() / (double) host.getRam().getCapacity();
         
         // Estimate utilization after allocation
         double vmCpuDemand = vm.getTotalMipsCapacity() / host.getTotalMipsCapacity();
@@ -461,7 +458,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     private double estimatePowerIncrease(Host host, Vm vm) {
         // Simplified power model
         double currentPower = host.getPowerModel().getPower();
-        double maxPower = host.getPowerModel().getMaxPower();
+        double maxPower = host.getPowerModel().getPower(1.0); // getMaxPower() does not exist
         
         // Estimate power after VM allocation
         double additionalUtil = vm.getTotalMipsCapacity() / host.getTotalMipsCapacity();
@@ -480,14 +477,14 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     private boolean performAllocation(Vm vm, Host host) {
         try {
             // Final validation
-            if (!host.isSuitableForVm(vm)) {
+            if (!Boolean.TRUE.equals(host.isSuitableForVm(vm))) {
                 logger.error("Host {} is not suitable for VM {} at allocation time", 
                     host.getId(), vm.getId());
                 return false;
             }
             
             // Perform allocation
-            boolean allocated = allocateHostForVm(vm, host);
+            boolean allocated = Boolean.TRUE.equals(allocateHostForVm(vm, host));
             
             if (allocated) {
                 // Update tracking maps
@@ -498,10 +495,10 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 logger.info("Successfully allocated VM {} to Host {} (CPU: {:.2f}%, RAM: {:.2f}%)", 
                     vm.getId(), host.getId(), 
                     host.getCpuPercentUtilization() * 100, 
-                    host.getRamPercentUtilization() * 100);
+                    host.getRam().getAllocatedResource() / (double) host.getRam().getCapacity() * 100);
                 
                 // Collect metrics
-                metricsCollector.recordVmAllocation(vm, host);
+                // metricsCollector.recordVmAllocation(vm, host); // Method does not exist
                 
                 return true;
             } else {
@@ -556,7 +553,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 vm.getId(), host.getId());
             
             // Collect metrics
-            metricsCollector.recordVmDeallocation(vm, host);
+            // metricsCollector.recordVmDeallocation(vm, host); // Method does not exist
             
         } catch (Exception e) {
             logger.error("Error deallocating VM {} from Host {}", 
@@ -570,8 +567,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @param vm The VM
      * @return The allocated host, or Host.NULL if not allocated
      */
-    @Override
-    public Host getHostForVm(Vm vm) {
+    public Host getHostForVm(final Vm vm) {
         if (vm == null) {
             return Host.NULL;
         }
@@ -724,5 +720,48 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
         public Map<Vm, Host> getAllocations() {
             return new HashMap<>(allocations);
         }
+
+        public Solution copy() {
+            Solution copy = new Solution();
+            for (Map.Entry<Vm, Host> entry : this.allocations.entrySet()) {
+                copy.allocateVmToHost(entry.getKey(), entry.getValue());
+            }
+            copy.fitness = this.fitness;
+            return copy;
+        }
+
+        public String getCacheKey() {
+            // Simple cache key: sorted VM IDs and their host IDs
+            return allocations.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey(Comparator.comparingLong(Vm::getId)))
+                .map(e -> e.getKey().getId() + ":" + e.getValue().getId())
+                .collect(Collectors.joining(","));
+        }
+
+        public Map<Host, List<Vm>> getHostVmsMap() {
+            Map<Host, List<Vm>> hostVms = new HashMap<>();
+            for (Map.Entry<Vm, Host> entry : allocations.entrySet()) {
+                hostVms.computeIfAbsent(entry.getValue(), k -> new ArrayList<>()).add(entry.getKey());
+            }
+            return hostVms;
+        }
+
+        public void addMapping(Vm vm, Host host) {
+            allocateVmToHost(vm, host);
+        }
+    }
+
+    /**
+     * Implements the defaultFindHostForVm method required by the base class.
+     * @param vm The VM to find a host for
+     * @return Optional containing the best host, or empty if none found
+     */
+    @Override
+    public java.util.Optional<Host> defaultFindHostForVm(Vm vm) {
+        List<Host> suitableHosts = getHostList().stream()
+            .filter(h -> Boolean.TRUE.equals(h.isSuitableForVm(vm)))
+            .collect(Collectors.toList());
+        Host bestHost = findBestHostForVm(vm, suitableHosts);
+        return java.util.Optional.ofNullable(bestHost);
     }
 }

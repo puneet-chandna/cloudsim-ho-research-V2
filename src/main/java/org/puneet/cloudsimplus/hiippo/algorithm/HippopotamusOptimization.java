@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy;
+import org.apache.commons.math3.special.Gamma;
 
 /**
  * Main implementation of the Hippopotamus Optimization (HO) algorithm for
@@ -37,7 +39,7 @@ public class HippopotamusOptimization {
     private final ConvergenceAnalyzer convergenceAnalyzer;
     
     // Solution cache for memory efficiency
-    private final Map<String, Solution> solutionCache;
+    private final Map<String, HippopotamusVmAllocationPolicy.Solution> solutionCache;
     private final List<Double> fitnessHistory;
     
     // Add static parameters for global tuning
@@ -81,7 +83,7 @@ public class HippopotamusOptimization {
      * @return the optimal VM placement solution
      * @throws IllegalArgumentException if vms or hosts is empty
      */
-    public Solution optimize(List<Vm> vms, List<Host> hosts) {
+    public HippopotamusVmAllocationPolicy.Solution optimize(List<Vm> vms, List<Host> hosts) {
         Objects.requireNonNull(vms, "VM list cannot be null");
         Objects.requireNonNull(hosts, "Host list cannot be null");
         
@@ -106,7 +108,7 @@ public class HippopotamusOptimization {
         
         // Find initial best solution
         Hippopotamus leader = findLeader(population);
-        Solution bestSolution = leader.getSolution().copy();
+        HippopotamusVmAllocationPolicy.Solution bestSolution = leader.getSolution().copy();
         double bestFitness = evaluateFitness(bestSolution);
         
         logger.debug("Initial best fitness: {}", bestFitness);
@@ -153,11 +155,7 @@ public class HippopotamusOptimization {
             
             iteration++;
             
-            // Clean up cache periodically
-            if (iteration % 50 == 0) {
-                solutionCache.clear();
-                System.gc();
-            }
+            
         }
         
         logger.info("HO optimization completed after {} iterations. Best fitness: {}", 
@@ -180,7 +178,7 @@ public class HippopotamusOptimization {
         List<Hippopotamus> population = new ArrayList<>();
         
         for (int i = 0; i < parameters.getPopulationSize(); i++) {
-            Solution solution = createRandomSolution(vms, hosts);
+            HippopotamusVmAllocationPolicy.Solution solution = createRandomSolution(vms, hosts);
             double fitness = evaluateFitness(solution);
             
             Hippopotamus hippo = new Hippopotamus(solution, fitness);
@@ -199,8 +197,8 @@ public class HippopotamusOptimization {
      * @param hosts the available hosts
      * @return a random solution
      */
-    private Solution createRandomSolution(List<Vm> vms, List<Host> hosts) {
-        Solution solution = new Solution();
+    private HippopotamusVmAllocationPolicy.Solution createRandomSolution(List<Vm> vms, List<Host> hosts) {
+        HippopotamusVmAllocationPolicy.Solution solution = new HippopotamusVmAllocationPolicy.Solution();
         
         for (Vm vm : vms) {
             // Find suitable hosts for this VM
@@ -252,15 +250,15 @@ public class HippopotamusOptimization {
      * @param prey the prey hippo
      */
     private void updatePosition(Hippopotamus hippo, Hippopotamus leader, Hippopotamus prey) {
-        Solution currentSolution = hippo.getSolution();
-        Solution leaderSolution = leader.getSolution();
-        Solution preySolution = prey.getSolution();
+        HippopotamusVmAllocationPolicy.Solution currentSolution = hippo.getSolution();
+        HippopotamusVmAllocationPolicy.Solution leaderSolution = leader.getSolution();
+        HippopotamusVmAllocationPolicy.Solution preySolution = prey.getSolution();
         
         // Create new solution based on position update
-        Solution newSolution = new Solution();
+        HippopotamusVmAllocationPolicy.Solution newSolution = new HippopotamusVmAllocationPolicy.Solution();
         
         // Apply position update for each VM mapping
-        for (Map.Entry<Vm, Host> entry : currentSolution.getMappings().entrySet()) {
+        for (Map.Entry<Vm, Host> entry : currentSolution.getAllocations().entrySet()) {
             Vm vm = entry.getKey();
             Host currentHost = entry.getValue();
             
@@ -337,8 +335,8 @@ public class HippopotamusOptimization {
     private double generateLevyFlight() {
         // Simplified Levy flight generation using Mantegna's algorithm
         double sigma = Math.pow(
-            (Math.gamma(1 + 1.5) * Math.sin(Math.PI * 1.5 / 2)) /
-            (Math.gamma((1 + 1.5) / 2) * 1.5 * Math.pow(2, (1.5 - 1) / 2)),
+            (Gamma.gamma(1 + 1.5) * Math.sin(Math.PI * 1.5 / 2)) /
+            (Gamma.gamma((1 + 1.5) / 2) * 1.5 * Math.pow(2, (1.5 - 1) / 2)),
             1 / 1.5);
         
         double u = random.nextGaussian() * sigma;
@@ -355,8 +353,8 @@ public class HippopotamusOptimization {
      * @param solution the solution to evaluate
      * @return the fitness value (lower is better)
      */
-    public double evaluateFitness(Solution solution) {
-        if (solution == null || solution.getMappings().isEmpty()) {
+    public double evaluateFitness(HippopotamusVmAllocationPolicy.Solution solution) {
+        if (solution == null || solution.getAllocations().isEmpty()) {
             return Double.MAX_VALUE;
         }
         
@@ -395,7 +393,7 @@ public class HippopotamusOptimization {
      * @param solution the solution
      * @return the average CPU utilization
      */
-    private double calculateCpuUtilization(Solution solution) {
+    private double calculateCpuUtilization(HippopotamusVmAllocationPolicy.Solution solution) {
         Map<Host, List<Vm>> hostVms = solution.getHostVmsMap();
         
         if (hostVms.isEmpty()) return 0.0;
@@ -422,7 +420,7 @@ public class HippopotamusOptimization {
      * @param solution the solution
      * @return the average RAM utilization
      */
-    private double calculateRamUtilization(Solution solution) {
+    private double calculateRamUtilization(HippopotamusVmAllocationPolicy.Solution solution) {
         Map<Host, List<Vm>> hostVms = solution.getHostVmsMap();
         
         if (hostVms.isEmpty()) return 0.0;
@@ -449,7 +447,7 @@ public class HippopotamusOptimization {
      * @param solution the solution
      * @return the total power consumption
      */
-    private double calculatePowerConsumption(Solution solution) {
+    private double calculatePowerConsumption(HippopotamusVmAllocationPolicy.Solution solution) {
         Map<Host, List<Vm>> hostVms = solution.getHostVmsMap();
         
         double totalPower = 0.0;
@@ -475,7 +473,7 @@ public class HippopotamusOptimization {
      * @param solution the solution
      * @return the number of SLA violations
      */
-    private double calculateSLAViolations(Solution solution) {
+    private double calculateSLAViolations(HippopotamusVmAllocationPolicy.Solution solution) {
         Map<Host, List<Vm>> hostVms = solution.getHostVmsMap();
         
         int violations = 0;
@@ -511,16 +509,16 @@ public class HippopotamusOptimization {
      * @param solution the solution to repair
      * @return the repaired solution
      */
-    private Solution repairSolution(Solution solution) {
-        Solution repaired = new Solution();
+    private HippopotamusVmAllocationPolicy.Solution repairSolution(HippopotamusVmAllocationPolicy.Solution solution) {
+        HippopotamusVmAllocationPolicy.Solution repaired = new HippopotamusVmAllocationPolicy.Solution();
         
         // Ensure all VMs are placed
-        for (Vm vm : solution.getMappings().keySet()) {
+        for (Vm vm : solution.getAllocations().keySet()) {
             Host host = solution.getHostForVm(vm);
             
             if (host == null || !host.isSuitableForVm(vm)) {
                 // Find new suitable host
-                List<Host> availableHosts = solution.getMappings().values().stream()
+                List<Host> availableHosts = solution.getAllocations().values().stream()
                     .distinct()
                     .filter(h -> h.isSuitableForVm(vm))
                     .collect(Collectors.toList());
@@ -546,23 +544,23 @@ public class HippopotamusOptimization {
      * @param hosts the original host list
      * @throws IllegalStateException if the solution is invalid
      */
-    private void validateSolution(Solution solution, List<Vm> vms, List<Host> hosts) {
+    private void validateSolution(HippopotamusVmAllocationPolicy.Solution solution, List<Vm> vms, List<Host> hosts) {
         // Check all VMs are placed
-        if (solution.getMappings().size() != vms.size()) {
+        if (solution.getAllocations().size() != vms.size()) {
             throw new IllegalStateException(
                 String.format("Solution does not place all VMs. Expected: %d, Actual: %d",
-                             vms.size(), solution.getMappings().size()));
+                             vms.size(), solution.getAllocations().size()));
         }
         
         // Check all VMs are from the original list
-        for (Vm vm : solution.getMappings().keySet()) {
+        for (Vm vm : solution.getAllocations().keySet()) {
             if (!vms.contains(vm)) {
                 throw new IllegalStateException("Solution contains unknown VM: " + vm.getId());
             }
         }
         
         // Check all hosts are from the original list
-        for (Host host : solution.getMappings().values()) {
+        for (Host host : solution.getAllocations().values()) {
             if (!hosts.contains(host)) {
                 throw new IllegalStateException("Solution contains unknown host: " + host.getId());
             }

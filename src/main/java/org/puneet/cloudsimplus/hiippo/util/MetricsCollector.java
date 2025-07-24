@@ -1,7 +1,6 @@
 package org.puneet.cloudsimplus.hiippo.util;
 
 import org.cloudsimplus.cloudlets.Cloudlet;
-import org.cloudsimplus.core.CloudSim;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.power.models.PowerModel;
@@ -36,7 +35,6 @@ public class MetricsCollector {
     private final Map<String, List<Double>> timeSeriesMetrics;
     
     // Simulation components
-    private CloudSim simulation;
     private List<Datacenter> datacenters;
     private DatacenterBroker broker;
     private long startTime;
@@ -64,15 +62,11 @@ public class MetricsCollector {
     /**
      * Initializes the metrics collector with simulation components
      * 
-     * @param simulation The CloudSim Plus simulation instance
      * @param datacenters List of datacenters in the simulation
      * @param broker The datacenter broker managing VMs and cloudlets
      */
-    public void initialize(CloudSim simulation, List<Datacenter> datacenters, 
+    public void initialize(List<Datacenter> datacenters, 
                           DatacenterBroker broker) {
-        if (simulation == null) {
-            throw new IllegalArgumentException("Simulation cannot be null");
-        }
         if (datacenters == null || datacenters.isEmpty()) {
             throw new IllegalArgumentException("Datacenters list cannot be null or empty");
         }
@@ -80,7 +74,6 @@ public class MetricsCollector {
             throw new IllegalArgumentException("Broker cannot be null");
         }
         
-        this.simulation = simulation;
         this.datacenters = new ArrayList<>(datacenters);
         this.broker = broker;
         this.startTime = System.currentTimeMillis();
@@ -447,36 +440,36 @@ public class MetricsCollector {
         summary.append("\n=== Metrics Summary ===\n");
         
         // Resource utilization
-        summary.append(String.format("CPU Utilization: %.2f%%\n", 
+        summary.append(String.format("CPU Utilization: %.2f%%%n", 
                                    getMetric("ResourceUtilCPU") * 100));
-        summary.append(String.format("RAM Utilization: %.2f%%\n", 
+        summary.append(String.format("RAM Utilization: %.2f%%%n", 
                                    getMetric("ResourceUtilRAM") * 100));
         
         // Power metrics
-        summary.append(String.format("Power Consumption: %.2f W\n", 
+        summary.append(String.format("Power Consumption: %.2f W%n", 
                                    getMetric("PowerConsumption")));
-        summary.append(String.format("Power Efficiency: %.4f\n", 
+        summary.append(String.format("Power Efficiency: %.4f%n", 
                                    getMetric("PowerEfficiency")));
         
         // VM allocation
-        summary.append(String.format("VMs Allocated: %d/%d (%.2f%%)\n", 
-                                   getMetric("VmAllocated").intValue(),
-                                   getMetric("VmTotal").intValue(),
+        summary.append(String.format("VMs Allocated: %d/%d (%.2f%%)%n", 
+                                   (int) getMetric("VmAllocated"),
+                                   (int) getMetric("VmTotal"),
                                    getMetric("AllocationSuccessRate") * 100));
         
         // SLA metrics
-        summary.append(String.format("SLA Violations: %d\n", 
-                                   getMetric("SLAViolations").intValue()));
-        summary.append(String.format("SLA Compliance: %.2f%%\n", 
+        summary.append(String.format("SLA Violations: %d%n", 
+                                   (int) getMetric("SLAViolations")));
+        summary.append(String.format("SLA Compliance: %.2f%%%n", 
                                    getMetric("SLACompliance") * 100));
         
         // Performance metrics
-        summary.append(String.format("Execution Time: %.3f seconds\n", 
+        summary.append(String.format("Execution Time: %.3f seconds%n", 
                                    getMetric("ExecutionTime")));
-        summary.append(String.format("Convergence Iterations: %d\n", 
-                                   getMetric("ConvergenceIterations").intValue()));
+        summary.append(String.format("Convergence Iterations: %d%n", 
+                                   (int) getMetric("ConvergenceIterations")));
         
-        summary.append("=====================\n");
+        summary.append("=====================%n");
         
         return summary.toString();
     }

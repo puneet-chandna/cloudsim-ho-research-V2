@@ -1,7 +1,6 @@
 package org.puneet.cloudsimplus.hiippo.statistical;
 
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
-import org.apache.commons.math3.stat.interval.ConfidenceInterval;
 import org.apache.commons.math3.stat.interval.NormalApproximationInterval;
 import org.apache.commons.math3.distribution.TDistribution;
 import org.apache.commons.math3.exception.MathIllegalArgumentException;
@@ -12,6 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.DoubleStream;
+import org.puneet.cloudsimplus.hiippo.exceptions.StatisticalValidationException;
 
 /**
  * Computes confidence intervals for experimental results using various statistical methods.
@@ -81,7 +81,7 @@ public class ConfidenceInterval {
      * @return confidence interval
      * @throws StatisticalValidationException if data is insufficient or invalid
      */
-    public static ConfidenceInterval computeNormalApproximation(double[] data, double confidenceLevel) {
+    public static ConfidenceInterval computeNormalApproximation(double[] data, double confidenceLevel) throws StatisticalValidationException {
         logger.info("Computing normal approximation confidence interval with {}% confidence", 
             confidenceLevel * 100);
         
@@ -93,24 +93,21 @@ public class ConfidenceInterval {
         int n = data.length;
         
         try {
-            NormalApproximationInterval intervalCalculator = new NormalApproximationInterval();
-            ConfidenceInterval interval = intervalCalculator.createInterval(n, mean, stdDev, confidenceLevel);
-            
-            double standardError = stdDev / Math.sqrt(n);
+            double z = new org.apache.commons.math3.distribution.NormalDistribution().inverseCumulativeProbability(1 - (1 - confidenceLevel) / 2);
+            double marginOfError = z * (stdDev / Math.sqrt(n));
             
             return new ConfidenceInterval(
-                interval.getLowerBound(),
-                interval.getUpperBound(),
+                mean - marginOfError,
+                mean + marginOfError,
                 mean,
-                standardError,
+                stdDev / Math.sqrt(n),
                 confidenceLevel,
                 n,
                 "Normal Approximation"
             );
             
         } catch (MathIllegalArgumentException e) {
-            throw new StatisticalValidationException(
-                "Failed to compute normal approximation interval: " + e.getMessage(), e);
+            throw StatisticalValidationException.confidenceIntervalError("Normal Approximation", confidenceLevel, e.getMessage());
         }
     }
     
@@ -123,7 +120,7 @@ public class ConfidenceInterval {
      * @return confidence interval
      * @throws StatisticalValidationException if data is insufficient or invalid
      */
-    public static ConfidenceInterval computeTDistribution(double[] data, double confidenceLevel) {
+    public static ConfidenceInterval computeTDistribution(double[] data, double confidenceLevel) throws StatisticalValidationException {
         logger.info("Computing t-distribution confidence interval with {}% confidence", 
             confidenceLevel * 100);
         
@@ -151,8 +148,7 @@ public class ConfidenceInterval {
             );
             
         } catch (MathIllegalArgumentException e) {
-            throw new StatisticalValidationException(
-                "Failed to compute t-distribution interval: " + e.getMessage(), e);
+            throw StatisticalValidationException.confidenceIntervalError("t-Distribution", confidenceLevel, e.getMessage());
         }
     }
     
@@ -165,7 +161,7 @@ public class ConfidenceInterval {
      * @return confidence interval
      * @throws StatisticalValidationException if data is insufficient or invalid
      */
-    public static ConfidenceInterval computeOptimal(double[] data, double confidenceLevel) {
+    public static ConfidenceInterval computeOptimal(double[] data, double confidenceLevel) throws StatisticalValidationException {
         logger.info("Computing optimal confidence interval based on sample size");
         
         validateData(data);
@@ -184,7 +180,7 @@ public class ConfidenceInterval {
      * @return confidence interval
      * @throws StatisticalValidationException if data is insufficient or invalid
      */
-    public static ConfidenceInterval computeOptimal(double[] data) {
+    public static ConfidenceInterval computeOptimal(double[] data) throws StatisticalValidationException {
         return computeOptimal(data, DEFAULT_CONFIDENCE_LEVEL);
     }
     
@@ -200,12 +196,12 @@ public class ConfidenceInterval {
     public static <T> ConfidenceInterval computeForMetric(
             List<T> results, 
             java.util.function.ToDoubleFunction<T> metricExtractor, 
-            double confidenceLevel) {
+            double confidenceLevel) throws StatisticalValidationException {
         
         logger.info("Computing confidence interval for metric across {} results", results.size());
         
         if (results == null || results.isEmpty()) {
-            throw new StatisticalValidationException("Results list cannot be null or empty");
+            throw new StatisticalValidationException(StatisticalValidationException.StatisticalErrorType.INSUFFICIENT_SAMPLE_SIZE, "Results list cannot be null or empty");
         }
         
         double[] data = results.stream()
@@ -309,16 +305,16 @@ public class ConfidenceInterval {
     /**
      * Validates input data array for confidence interval calculation.
      */
-    private static void validateData(double[] data) {
+    private static void validateData(double[] data) throws StatisticalValidationException {
         if (data == null) {
-            throw new StatisticalValidationException("Data array cannot be null");
+            throw new StatisticalValidationException(StatisticalValidationException.StatisticalErrorType.INSUFFICIENT_SAMPLE_SIZE, "Data array cannot be null");
         }
         if (data.length < MIN_SAMPLE_SIZE) {
-            throw new StatisticalValidationException(
+            throw new StatisticalValidationException(StatisticalValidationException.StatisticalErrorType.INSUFFICIENT_SAMPLE_SIZE,
                 "Insufficient data points. Need at least " + MIN_SAMPLE_SIZE);
         }
         if (DoubleStream.of(data).anyMatch(Double::isNaN)) {
-            throw new StatisticalValidationException("Data contains NaN values");
+            throw new StatisticalValidationException(StatisticalValidationException.StatisticalErrorType.INSUFFICIENT_SAMPLE_SIZE, "Data contains NaN values");
         }
         if (DoubleStream.of(data).allMatch(d -> d == data[0])) {
             logger.warn("All data points are identical - interval width will be zero");
