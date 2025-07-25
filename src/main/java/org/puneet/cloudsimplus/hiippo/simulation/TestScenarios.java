@@ -73,7 +73,8 @@ public class TestScenarios {
      * @return TestScenario object ready for simulation
      * @throws ValidationException if scenario parameters are invalid
      */
-    public static TestScenario createScenario(String scenarioName, ScenarioSpec spec) {
+    public static TestScenario createScenario(String scenarioName, int vmCount, int hostCount) throws ValidationException {
+        ScenarioSpec spec = new ScenarioSpec(vmCount, hostCount);
         logger.info("Creating test scenario: {} with {} VMs and {} Hosts", 
             scenarioName, spec.vmCount, spec.hostCount);
             
@@ -254,7 +255,7 @@ public class TestScenarios {
                 host.setPowerModel(powerModel);
                 
                 // Enable state history for monitoring
-                host.enableStateHistory();
+                // host.enableStateHistory(); // Method removed in CloudSim Plus 8.0.0
                 
                 return host;
             })
@@ -288,7 +289,7 @@ public class TestScenarios {
                 UtilizationModel bwModel = new UtilizationModelDynamic(0.1)
                     .setMaxResourceUtilization(0.5);
                 
-                Cloudlet cloudlet = new CloudletSimple(i, length, (int) vm.getNumberOfPes());
+                Cloudlet cloudlet = new CloudletSimple(i, length, (int) vm.getPesNumber());
                 cloudlet.setFileSize(300)
                     .setOutputSize(300)
                     .setUtilizationModelCpu(cpuModel)
@@ -308,7 +309,7 @@ public class TestScenarios {
      * @param scenarioName Name of scenario
      * @throws ValidationException if scenario is invalid
      */
-    private static void validateScenario(List<Vm> vms, List<Host> hosts, String scenarioName) {
+    private static void validateScenario(List<Vm> vms, List<Host> hosts, String scenarioName) throws ValidationException {
         if (vms == null || vms.isEmpty()) {
             throw new ValidationException("No VMs created for scenario: " + scenarioName);
         }
@@ -409,6 +410,16 @@ public class TestScenarios {
     /**
      * Inner class representing Host configuration
      */
+    private static class ScenarioSpec {
+        final int vmCount;
+        final int hostCount;
+        
+        ScenarioSpec(int vmCount, int hostCount) {
+            this.vmCount = vmCount;
+            this.hostCount = hostCount;
+        }
+    }
+    
     private static class HostConfig {
         final int pes;
         final long mipsPerPe;

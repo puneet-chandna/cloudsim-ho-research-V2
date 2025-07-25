@@ -187,7 +187,7 @@ public class ScalabilityTester {
                 
                 // 7. Use correct ScenarioSpec constructor
                 TestScenario warmupScenario = org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.createScenario(
-                    "Warmup", new ScenarioSpec("Warmup", vmCount, hostCount, 1));
+                    "Warmup", vmCount, hostCount);
                 
                 ExperimentResult warmupResult = experimentRunner.runExperiment(
                     algorithm, warmupScenario, 0); // -1 indicates warmup run
@@ -305,7 +305,7 @@ public class ScalabilityTester {
                 logger.debug("Starting test run {} of {}", run + 1, TEST_RUNS);
                 TestScenario testScenario = org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.createScenario(
                     String.format("Scalability_%d_%d", vmCount, hostCount),
-                    new ScenarioSpec("Scalability", vmCount, hostCount, 1));
+                    vmCount, hostCount);
                 ExperimentConfig.initializeRandomSeed(run);
                 long startTime = System.nanoTime();
                 ExperimentResult result = experimentRunner.runExperiment(

@@ -1,7 +1,7 @@
 package org.puneet.cloudsimplus.hiippo.simulation;
 
 import org.cloudsimplus.allocationpolicies.VmAllocationPolicy;
-import org.cloudsimplus.core.CloudSim;
+import org.cloudsimplus.core.CloudSimPlus;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.datacenters.DatacenterSimple;
 import org.cloudsimplus.hosts.Host;
@@ -62,11 +62,10 @@ public class DatacenterFactory {
      * @param vmAllocationPolicy The VM allocation policy to use
      * @param datacenterName Name identifier for the datacenter
      * @return A fully configured Datacenter instance
-     * @throws ValidationException if any parameter is invalid
      * @throws IllegalArgumentException if parameters are null or out of range
      */
     public static Datacenter createDatacenter(
-            CloudSim simulation,
+            CloudSimPlus simulation,
             int hostCount,
             VmAllocationPolicy vmAllocationPolicy,
             String datacenterName) {
@@ -81,38 +80,32 @@ public class DatacenterFactory {
             MemoryManager.checkMemoryUsage("Before creating datacenter");
         }
         
-        try {
-            // Create hosts for the datacenter
-            List<Host> hostList = createHosts(simulation, hostCount);
-            
-            // Create and configure the datacenter
-            DatacenterSimple datacenter = new DatacenterSimple(simulation, hostList, vmAllocationPolicy);
-            datacenter.setName(datacenterName);
-            datacenter.setSchedulingInterval(SCHEDULING_INTERVAL);
-            
-            // Set datacenter characteristics
-            datacenter.getCharacteristics()
-                .setCostPerSecond(COST_PER_SECOND)
-                .setCostPerMem(COST_PER_RAM)
-                .setCostPerStorage(COST_PER_STORAGE)
-                .setCostPerBw(COST_PER_BW);
-            
-            // Enable power measurements
-            configurePowerMeasurement(datacenter);
-            
-            logger.info("Successfully created datacenter '{}' with {} hosts, total capacity: {} MIPS, {} MB RAM",
-                datacenterName, 
-                hostList.size(),
-                hostList.stream().mapToLong(Host::getTotalMipsCapacity).sum(),
-                hostList.stream().mapToLong(host -> host.getRam().getCapacity()).sum()
-            );
-            
-            return datacenter;
-            
-        } catch (Exception e) {
-            logger.error("Failed to create datacenter '{}': {}", datacenterName, e.getMessage());
-            throw new ValidationException("Failed to create datacenter: " + e.getMessage(), e);
-        }
+        // Create hosts for the datacenter
+        List<Host> hostList = createHosts(simulation, hostCount);
+        
+        // Create and configure the datacenter
+        DatacenterSimple datacenter = new DatacenterSimple(simulation, hostList, vmAllocationPolicy);
+        datacenter.setName(datacenterName);
+        datacenter.setSchedulingInterval(SCHEDULING_INTERVAL);
+        
+        // Set datacenter characteristics
+        datacenter.getCharacteristics()
+            .setCostPerSecond(COST_PER_SECOND)
+            .setCostPerMem(COST_PER_RAM)
+            .setCostPerStorage(COST_PER_STORAGE)
+            .setCostPerBw(COST_PER_BW);
+        
+        // Enable power measurements
+        configurePowerMeasurement(datacenter);
+        
+        logger.info("Successfully created datacenter '{}' with {} hosts, total capacity: {} MIPS, {} MB RAM",
+            datacenterName, 
+            hostList.size(),
+            hostList.stream().mapToDouble(Host::getTotalMipsCapacity).sum(),
+            hostList.stream().mapToLong(host -> host.getRam().getCapacity()).sum()
+        );
+        
+        return datacenter;
     }
     
     /**
@@ -122,10 +115,10 @@ public class DatacenterFactory {
      * @param scenario The scenario name (Micro, Small, Medium, Large, XLarge)
      * @param vmAllocationPolicy The VM allocation policy to use
      * @return A configured Datacenter instance
-     * @throws ValidationException if scenario is unknown or parameters are invalid
+     * @throws IllegalArgumentException if scenario is unknown or parameters are invalid
      */
     public static Datacenter createDatacenterForScenario(
-            CloudSim simulation,
+            CloudSimPlus simulation,
             String scenario,
             VmAllocationPolicy vmAllocationPolicy) {
         
@@ -134,7 +127,12 @@ public class DatacenterFactory {
         if (!ExperimentConfig.isScenarioEnabled(scenario)) {
             throw new IllegalArgumentException("Scenario '" + scenario + "' is not enabled in config.properties");
         }
-        int hostCount = ExperimentConfig.getHostCountForScenario(scenario);
+        int hostCount;
+        try {
+            hostCount = getHostCountForScenario(scenario);
+        } catch (ValidationException e) {
+            throw new RuntimeException(e);
+        }
         String datacenterName = "DC_" + scenario;
         
         logger.info("Creating datacenter for scenario '{}' with {} hosts", scenario, hostCount);
@@ -148,39 +146,33 @@ public class DatacenterFactory {
      * @param simulation The CloudSim simulation instance
      * @param count The number of hosts to create
      * @return List of configured Host instances
-     * @throws ValidationException if host creation fails
+     * @throws IllegalArgumentException if host creation fails
      */
-    private static List<Host> createHosts(CloudSim simulation, int count) {
+    public static List<Host> createHosts(CloudSimPlus simulation, int count) {
         logger.debug("Creating {} hosts for simulation", count);
         
         List<Host> hostList = new ArrayList<>(count);
         
-        try {
-            // Use parallel stream for large host counts to improve performance
-            if (count > 100 && Runtime.getRuntime().availableProcessors() > 2) {
-                hostList = IntStream.range(0, count)
-                    .parallel()
-                    .mapToObj(i -> createHost(simulation, i))
-                    .toList();
-            } else {
-                // Sequential creation for smaller counts
-                for (int i = 0; i < count; i++) {
-                    hostList.add(createHost(simulation, i));
-                    
-                    // Log progress for large counts
-                    if (count > 50 && i % 50 == 0 && i > 0) {
-                        logger.debug("Created {}/{} hosts", i, count);
-                    }
+        // Use parallel stream for large host counts to improve performance
+        if (count > 100 && Runtime.getRuntime().availableProcessors() > 2) {
+            hostList = IntStream.range(0, count)
+                .parallel()
+                .mapToObj(i -> createHost(simulation, i, "timeshared"))
+                .toList();
+        } else {
+            // Sequential creation for smaller counts
+            for (int i = 0; i < count; i++) {
+                hostList.add(createHost(simulation, i, "timeshared"));
+                
+                // Log progress for large counts
+                if (count > 50 && i % 50 == 0 && i > 0) {
+                    logger.debug("Created {}/{} hosts", i, count);
                 }
             }
-            
-            logger.debug("Successfully created {} hosts", hostList.size());
-            return hostList;
-            
-        } catch (Exception e) {
-            logger.error("Failed to create hosts: {}", e.getMessage());
-            throw new ValidationException("Failed to create hosts: " + e.getMessage(), e);
         }
+        
+        logger.debug("Successfully created {} hosts", hostList.size());
+        return hostList;
     }
     
     /**
@@ -190,7 +182,7 @@ public class DatacenterFactory {
      * @param id The unique identifier for the host
      * @return A configured Host instance
      */
-    private static Host createHost(CloudSim simulation, int id, String schedulerType) {
+    private static Host createHost(CloudSimPlus simulation, int id, String schedulerType) {
         List<Pe> peList = createPeList();
         
         HostSimple host = new HostSimple(
@@ -203,7 +195,7 @@ public class DatacenterFactory {
         // Set scheduler based on parameter
         switch (schedulerType.toLowerCase()) {
             case "spaceshared":
-                host.setVmScheduler(new VmSchedulerSpaceShared());
+                // Default is space-shared, do not set scheduler
                 break;
             case "timeshared":
             default:
@@ -216,9 +208,6 @@ public class DatacenterFactory {
         // Configure power model
         PowerModelHost powerModel = createPowerModel();
         host.setPowerModel(powerModel);
-        
-        // Enable state history logging for analysis
-        host.enableStateHistory();
         
         return host;
     }
@@ -257,11 +246,9 @@ public class DatacenterFactory {
      * @param datacenter The datacenter to configure
      */
     private static void configurePowerMeasurement(Datacenter datacenter) {
-        if (ExperimentConfig.ENABLE_POWER_MEASUREMENT) {
-            PowerMeter powerMeter = new PowerMeter(datacenter);
-            // Power meter will automatically collect measurements
-            logger.debug("Power measurement enabled for datacenter '{}'", datacenter.getName());
-        }
+        // Power measurement is enabled by setting a PowerModelHost on each host.
+        // No explicit PowerMeter or config flag needed in CloudSim Plus 8.0.0
+        logger.debug("Power measurement enabled for datacenter '{}' (by PowerModelHost)", datacenter.getName());
     }
     
     /**
@@ -271,28 +258,28 @@ public class DatacenterFactory {
      * @param hostCount The number of hosts
      * @param vmAllocationPolicy The VM allocation policy
      * @param datacenterName The datacenter name
-     * @throws ValidationException if any parameter is invalid
+     * @throws IllegalArgumentException if any parameter is invalid
      */
     private static void validateParameters(
-            CloudSim simulation,
+            CloudSimPlus simulation,
             int hostCount,
             VmAllocationPolicy vmAllocationPolicy,
             String datacenterName) {
         
         if (simulation == null) {
-            throw new ValidationException("CloudSim simulation instance cannot be null");
+            throw new IllegalArgumentException("CloudSim simulation instance cannot be null");
         }
         
         if (vmAllocationPolicy == null) {
-            throw new ValidationException("VM allocation policy cannot be null");
+            throw new IllegalArgumentException("VM allocation policy cannot be null");
         }
         
         if (datacenterName == null || datacenterName.trim().isEmpty()) {
-            throw new ValidationException("Datacenter name cannot be null or empty");
+            throw new IllegalArgumentException("Datacenter name cannot be null or empty");
         }
         
         if (hostCount <= 0) {
-            throw new ValidationException("Host count must be positive, got: " + hostCount);
+            throw new IllegalArgumentException("Host count must be positive, got: " + hostCount);
         }
         
         if (hostCount > 1000) {
@@ -300,7 +287,7 @@ public class DatacenterFactory {
             
             // Check if we have enough memory for this many hosts
             if (!MemoryManager.hasEnoughMemoryForScenario(0, hostCount)) {
-                throw new ValidationException(
+                throw new IllegalArgumentException(
                     "Insufficient memory to create datacenter with " + hostCount + " hosts");
             }
         }
@@ -320,7 +307,7 @@ public class DatacenterFactory {
             case "medium" -> 20;
             case "large" -> 40;
             case "xlarge" -> 100;
-            default -> throw new ValidationException("Unknown scenario: " + scenario);
+            default -> throw new IllegalArgumentException("Unknown scenario: " + scenario);
         };
     }
     
@@ -332,10 +319,10 @@ public class DatacenterFactory {
      * @param vmAllocationPolicy The VM allocation policy
      * @param datacenterName The datacenter name
      * @return A configured Datacenter instance
-     * @throws ValidationException if parameters are invalid
+     * @throws IllegalArgumentException if parameters are invalid
      */
     public static Datacenter createCustomDatacenter(
-            CloudSim simulation,
+            CloudSimPlus simulation,
             List<HostSpec> hostSpecs,
             VmAllocationPolicy vmAllocationPolicy,
             String datacenterName) {
@@ -346,7 +333,7 @@ public class DatacenterFactory {
         Objects.requireNonNull(hostSpecs, "Host specifications cannot be null");
         
         if (hostSpecs.isEmpty()) {
-            throw new ValidationException("Host specifications list cannot be empty");
+            throw new IllegalArgumentException("Host specifications list cannot be empty");
         }
         
         List<Host> hostList = new ArrayList<>(hostSpecs.size());
@@ -356,11 +343,9 @@ public class DatacenterFactory {
             Host host = createCustomHost(simulation, i, spec);
             hostList.add(host);
         }
-        
         DatacenterSimple datacenter = new DatacenterSimple(simulation, hostList, vmAllocationPolicy);
         datacenter.setName(datacenterName);
         datacenter.setSchedulingInterval(SCHEDULING_INTERVAL);
-        
         return datacenter;
     }
     
@@ -372,7 +357,7 @@ public class DatacenterFactory {
      * @param spec The host specification
      * @return A configured Host instance
      */
-    private static Host createCustomHost(CloudSim simulation, int id, HostSpec spec) {
+    private static Host createCustomHost(CloudSimPlus simulation, int id, HostSpec spec) {
         List<Pe> peList = new ArrayList<>(spec.getPeCount());
         for (int i = 0; i < spec.getPeCount(); i++) {
             peList.add(new PeSimple(spec.getMipsPerPe()));

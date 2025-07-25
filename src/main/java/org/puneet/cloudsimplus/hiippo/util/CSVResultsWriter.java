@@ -581,24 +581,130 @@ public class CSVResultsWriter {
         }
     }
     
+    public static void writeSummaryStatistics(Map<String, List<ExperimentResult>> allResults) throws IOException {
+        String filePath = STATISTICAL_DIR + "/summary_statistics.csv";
+        CSVFormat format = CSVFormat.DEFAULT
+            .withHeader("Algorithm", "Scenario", "Metric", "Mean", "StdDev", "Min", "Max", "Count")
+            .withRecordSeparator("\n");
+        
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath));
+             CSVPrinter printer = new CSVPrinter(writer, format)) {
+            
+            for (Map.Entry<String, List<ExperimentResult>> entry : allResults.entrySet()) {
+                String algorithm = entry.getKey();
+                List<ExperimentResult> results = entry.getValue();
+                
+                // Calculate statistics for each metric
+                calculateAndWriteStatistics(printer, algorithm, results, "ResourceUtilCPU", 
+                    ExperimentResult::getResourceUtilCPU);
+                calculateAndWriteStatistics(printer, algorithm, results, "ResourceUtilRAM", 
+                    ExperimentResult::getResourceUtilRAM);
+                calculateAndWriteStatistics(printer, algorithm, results, "PowerConsumption", 
+                    ExperimentResult::getPowerConsumption);
+                calculateAndWriteStatistics(printer, algorithm, results, "ExecutionTime", 
+                    ExperimentResult::getExecutionTime);
+            }
+        }
+    }
+    
+    private static void calculateAndWriteStatistics(CSVPrinter printer, String algorithm, 
+            List<ExperimentResult> results, String metricName, 
+            java.util.function.Function<ExperimentResult, Double> getter) throws IOException {
+        if (results.isEmpty()) return;
+        
+        List<Double> values = results.stream()
+            .map(getter)
+            .filter(v -> v != null && !Double.isNaN(v))
+            .collect(Collectors.toList());
+        
+        if (values.isEmpty()) return;
+        
+        double mean = values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+        double variance = values.stream()
+            .mapToDouble(v -> Math.pow(v - mean, 2))
+            .average().orElse(0.0);
+        double stdDev = Math.sqrt(variance);
+        double min = values.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
+        double max = values.stream().mapToDouble(Double::doubleValue).max().orElse(0.0);
+        
+        printer.printRecord(algorithm, "ALL", metricName, mean, stdDev, min, max, values.size());
+    }
+    
+    public static void writeScalabilityAnalysis(String algorithm, 
+            Map<String, List<ExperimentResult>> allResults,
+            Map<String, Object> scenarioSpecs) throws IOException {
+        String filePath = SCALABILITY_DIR + "/scalability_analysis.csv";
+        CSVFormat format = CSVFormat.DEFAULT
+            .withHeader("Algorithm", "VmCount", "HostCount", "ExecutionTime", "MemoryUsage", 
+                       "CpuUtilization", "QualityScore", "SuccessRate")
+            .withRecordSeparator("\n");
+        
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath));
+             CSVPrinter printer = new CSVPrinter(writer, format)) {
+            
+            for (Map.Entry<String, List<ExperimentResult>> entry : allResults.entrySet()) {
+                List<ExperimentResult> results = entry.getValue();
+                for (ExperimentResult result : results) {
+                    // Extract scalability metrics from result
+                    printer.printRecord(
+                        algorithm,
+                        result.getVmTotal(),
+                        result.getHosts() != null ? result.getHosts().size() : 0,
+                        result.getExecutionTime(),
+                        0.0, // Memory usage placeholder
+                        result.getResourceUtilCPU(),
+                        0.0, // Quality score placeholder
+                        1.0  // Success rate placeholder
+                    );
+                }
+            }
+        }
+    }
+    
     /**
      * Experiment result data structure for CSV writing.
      */
     public static class ExperimentResult {
-        private final String algorithm;
-        private final String scenario;
-        private final int replication;
-        private final double resourceUtilCPU;
-        private final double resourceUtilRAM;
-        private final double powerConsumption;
-        private final int slaViolations;
-        private final double executionTime;
-        private final int convergenceIterations;
-        private final int vmAllocated;
-        private final int vmTotal;
+        private String algorithm;
+        private String scenario;
+        private int replication;
+        private double resourceUtilCPU;
+        private double resourceUtilRAM;
+        private double powerConsumption;
+        private int slaViolations;
+        private double executionTime;
+        private int convergenceIterations;
+        private int vmAllocated;
+        private int vmTotal;
+        private String experimentId;
+        private LocalDateTime timestamp;
+        private Map<String, Object> parameters;
+        private boolean failed;
+        private Map<String, Object> metrics;
         // Add for validation only (not for CSV):
         private List<org.cloudsimplus.vms.Vm> vms;
         private List<org.cloudsimplus.hosts.Host> hosts;
+
+        public ExperimentResult() {
+            this.algorithm = "";
+            this.scenario = "";
+            this.replication = 0;
+            this.resourceUtilCPU = 0.0;
+            this.resourceUtilRAM = 0.0;
+            this.powerConsumption = 0.0;
+            this.slaViolations = 0;
+            this.executionTime = 0.0;
+            this.convergenceIterations = 0;
+            this.vmAllocated = 0;
+            this.vmTotal = 0;
+            this.experimentId = "";
+            this.timestamp = LocalDateTime.now();
+            this.parameters = new HashMap<>();
+            this.failed = false;
+            this.metrics = new HashMap<>();
+            this.vms = null;
+            this.hosts = null;
+        }
 
         public ExperimentResult(String algorithm, String scenario, int replication,
                               double resourceUtilCPU, double resourceUtilRAM,
@@ -616,6 +722,11 @@ public class CSVResultsWriter {
             this.convergenceIterations = convergenceIterations;
             this.vmAllocated = vmAllocated;
             this.vmTotal = vmTotal;
+            this.experimentId = "";
+            this.timestamp = LocalDateTime.now();
+            this.parameters = new HashMap<>();
+            this.failed = false;
+            this.metrics = new HashMap<>();
             this.vms = null;
             this.hosts = null;
         }
@@ -648,5 +759,73 @@ public class CSVResultsWriter {
         public List<org.cloudsimplus.hosts.Host> getHosts() { return hosts; }
         public void setVms(List<org.cloudsimplus.vms.Vm> vms) { this.vms = vms; }
         public void setHosts(List<org.cloudsimplus.hosts.Host> hosts) { this.hosts = hosts; }
+        
+        // Additional getters and setters
+        public String getExperimentId() { return experimentId; }
+        public LocalDateTime getTimestamp() { return timestamp; }
+        public Map<String, Object> getParameters() { return parameters; }
+        public boolean isFailed() { return failed; }
+        public Map<String, Object> getMetrics() { return metrics; }
+        
+        public void setAlgorithm(String algorithm) { this.algorithm = algorithm; }
+        public void setScenario(String scenario) { this.scenario = scenario; }
+        public void setReplication(int replication) { this.replication = replication; }
+        public void setResourceUtilCPU(Double resourceUtilCPU) { this.resourceUtilCPU = resourceUtilCPU != null ? resourceUtilCPU : 0.0; }
+        public void setResourceUtilRAM(Double resourceUtilRAM) { this.resourceUtilRAM = resourceUtilRAM != null ? resourceUtilRAM : 0.0; }
+        public void setPowerConsumption(Double powerConsumption) { this.powerConsumption = powerConsumption != null ? powerConsumption : 0.0; }
+        public void setSlaViolations(int slaViolations) { this.slaViolations = slaViolations; }
+        public void setExecutionTime(double executionTime) { this.executionTime = executionTime; }
+        public void setConvergenceIterations(int convergenceIterations) { this.convergenceIterations = convergenceIterations; }
+        public void setVmAllocated(int vmAllocated) { this.vmAllocated = vmAllocated; }
+        public void setVmTotal(int vmTotal) { this.vmTotal = vmTotal; }
+        public void setExperimentId(String experimentId) { this.experimentId = experimentId; }
+        public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
+        public void setTimestamp(java.time.Instant timestamp) { this.timestamp = timestamp.atZone(java.time.ZoneId.systemDefault()).toLocalDateTime(); }
+        public void setParameters(Map<String, Object> parameters) { this.parameters = parameters; }
+        public void setFailed(boolean failed) { this.failed = failed; }
+        public void setMetrics(Map<String, Object> metrics) { this.metrics = metrics; }
+        
+        // Additional setters for specific metrics
+        public void setFinalFitness(double finalFitness) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("finalFitness", finalFitness); 
+        }
+        public void setAvgCloudletExecutionTime(Double avgCloudletExecutionTime) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("avgCloudletExecutionTime", avgCloudletExecutionTime); 
+        }
+        public void setAvgHostEfficiency(Double avgHostEfficiency) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("avgHostEfficiency", avgHostEfficiency); 
+        }
+        public void setPeakMemoryUsageMB(Double peakMemoryUsageMB) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("peakMemoryUsageMB", peakMemoryUsageMB); 
+        }
+        public void setValid(boolean valid) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("valid", valid); 
+        }
+        
+        public void setResourceUtilizationCPU(Double resourceUtilCPU) { this.resourceUtilCPU = resourceUtilCPU != null ? resourceUtilCPU : 0.0; }
+        public void setResourceUtilizationRAM(Double resourceUtilRAM) { this.resourceUtilRAM = resourceUtilRAM != null ? resourceUtilRAM : 0.0; }
+        public void setAllocationTime(double allocationTime) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("allocationTime", allocationTime);
+        }
+        public void setMemoryUsed(long memoryUsed) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("memoryUsed", memoryUsed);
+        }
+        public void setSimulationTime(double simulationTime) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("simulationTime", simulationTime);
+        }
+        public void setValidationMessage(String validationMessage) { 
+            if (this.metrics == null) this.metrics = new HashMap<>();
+            this.metrics.put("validationMessage", validationMessage);
+        }
+        public Double getResourceUtilizationCPU() { return resourceUtilCPU; }
+        public Double getResourceUtilizationRAM() { return resourceUtilRAM; }
     }
 }

@@ -43,6 +43,27 @@ public class ProgressTracker {
     }
     
     /**
+     * Initializes a task with the specified name and total count.
+     * 
+     * @param taskName the name of the task to initialize
+     * @param totalCount the total number of items to process
+     */
+    public void initializeTask(String taskName, int totalCount) {
+        if (taskName == null || taskName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Task name cannot be null or empty");
+        }
+        
+        if (totalCount <= 0) {
+            throw new IllegalArgumentException("Total count must be positive");
+        }
+        
+        ProgressData data = progressMap.computeIfAbsent(taskName, k -> new ProgressData());
+        data.update(0, totalCount);
+        
+        logger.info("Task '{}' initialized with {} total items", taskName, totalCount);
+    }
+    
+    /**
      * Reports progress for a specific phase or task.
      * 
      * @param phaseName the name of the phase being tracked

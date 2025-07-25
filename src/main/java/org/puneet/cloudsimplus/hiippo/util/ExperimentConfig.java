@@ -45,6 +45,9 @@ public final class ExperimentConfig {
     /** Significance level for hypothesis testing (α = 0.05) */
     public static final double SIGNIFICANCE_LEVEL = 0.05;
     
+    /** Enable report generation for experiments */
+    public static final boolean ENABLE_REPORT_GENERATION = true;
+    
     // ===================================================================================
     // MEMORY MANAGEMENT SETTINGS (Optimized for 16GB Systems)
     // ===================================================================================

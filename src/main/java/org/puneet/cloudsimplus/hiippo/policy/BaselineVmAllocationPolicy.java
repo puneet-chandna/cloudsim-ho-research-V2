@@ -3,6 +3,7 @@ package org.puneet.cloudsimplus.hiippo.policy;
 import org.cloudsimplus.allocationpolicies.VmAllocationPolicy;
 import org.cloudsimplus.allocationpolicies.VmAllocationPolicyAbstract;
 import org.cloudsimplus.hosts.Host;
+import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.vms.Vm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,14 +98,14 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
      * Allocates a host for the given VM with comprehensive error handling
      * 
      * @param vm The VM to allocate
-     * @return true if allocation was successful, false otherwise
+     * @return boolean indicating if allocation was successful
      * @throws IllegalArgumentException if vm is null
      */
     @Override
-    public Object allocateHostForVm(final Vm vm) {
+    public HostSuitability allocateHostForVm(final Vm vm) {
         if (vm == null) {
             logger.error("Cannot allocate host for null VM");
-            throw new IllegalArgumentException("VM cannot be null");
+            return HostSuitability.NULL;
         }
         
         logger.debug("Attempting to allocate host for VM {} using {} policy", 
@@ -117,89 +118,85 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
             // Check memory before allocation
             MemoryManager.checkMemoryUsage("VM_ALLOCATION_" + vm.getId());
             
-            // Validate VM requirements
-            if (!validateVmRequirements(vm)) {
-                logger.warn("VM {} has invalid requirements", vm.getId());
-                failedAllocations++;
-                return false;
-            }
-            
-            // Check if VM is already allocated
-            if (vmToHostMap.containsKey(vm.getId())) {
-                logger.warn("VM {} is already allocated to host {}", 
-                    vm.getId(), vmToHostMap.get(vm.getId()).getId());
-                return false;
-            }
-            
-            // Get suitable hosts
-            List<Host> suitableHosts = findSuitableHosts(vm);
-            
-            if (suitableHosts.isEmpty()) {
-                logger.warn("No suitable hosts found for VM {} with requirements: " +
-                    "MIPS={}, RAM={}, BW={}, Storage={}", 
-                    vm.getId(), vm.getTotalMipsCapacity(), 
-                    vm.getRam().getCapacity(), vm.getBw().getCapacity(), 
-                    vm.getStorage().getCapacity());
-                failedAllocations++;
-                return false;
-            }
-            
-            // Log suitable hosts found
-            if (detailedLogging) {
-                logger.debug("Found {} suitable hosts for VM {}: {}", 
-                    suitableHosts.size(), vm.getId(),
-                    suitableHosts.stream()
-                        .map(h -> h.getId())
-                        .collect(Collectors.toList()));
-            }
-            
-            // Attempt allocation with retry logic
-            boolean allocated = false;
-            int attempts = 0;
-            
-            while (!allocated && attempts < MAX_RETRY_ATTEMPTS && !suitableHosts.isEmpty()) {
-                attempts++;
-                Host selectedHost = selectHost(vm, suitableHosts);
-                
-                if (selectedHost != null) {
-                    allocated = performAllocation(vm, selectedHost);
-                    
-                    if (!allocated) {
-                        logger.debug("Allocation attempt {} failed for VM {} on host {}", 
-                            attempts, vm.getId(), selectedHost.getId());
-                        suitableHosts.remove(selectedHost);
-                    }
-                }
-            }
-            
-            // Record allocation time
-            long allocationTime = System.currentTimeMillis() - startTime;
-            
-            if (allocated) {
-                successfulAllocations++;
-                logger.info("Successfully allocated VM {} to host {} in {} ms after {} attempts", 
-                    vm.getId(), vm.getHost().getId(), allocationTime, attempts);
-                
-                // Collect metrics if available
-                if (metricsCollector != null) {
-                    metricsCollector.getAllMetrics().put("LastAllocationTime", (double) allocationTime);
-                }
-            } else {
-                failedAllocations++;
-                logger.error("Failed to allocate VM {} after {} attempts in {} ms", 
-                    vm.getId(), attempts, allocationTime);
-                
-                // Optionally record failure, but no method exists
-            }
-            
-            return allocated;
-            
-        } catch (Exception e) {
-            logger.error("Unexpected error during VM {} allocation: {}", 
-                vm.getId(), e.getMessage(), e);
+                    // Validate VM requirements
+        if (!validateVmRequirements(vm)) {
+            logger.warn("VM {} has invalid requirements", vm.getId());
             failedAllocations++;
-            return false;
+            return HostSuitability.NULL;
         }
+        
+        // Check if VM is already allocated
+        if (vmToHostMap.containsKey(vm.getId())) {
+            logger.warn("VM {} is already allocated to host {}", 
+                vm.getId(), vmToHostMap.get(vm.getId()).getId());
+            return HostSuitability.NULL;
+        }
+        
+        // Get suitable hosts
+        List<Host> suitableHosts = findSuitableHosts(vm);
+        
+        if (suitableHosts.isEmpty()) {
+            logger.warn("No suitable host found for VM {} (MIPS: {}, RAM: {} MB, BW: {} Mbps, Storage: {} GB)",
+                vm.getId(), vm.getTotalMipsCapacity(), vm.getRam().getCapacity(),
+                vm.getBw().getCapacity(), vm.getStorage().getCapacity());
+            failedAllocations++;
+            return HostSuitability.NULL;
+        }
+        
+        // Log suitable hosts found
+        if (detailedLogging) {
+            logger.debug("Found {} suitable hosts for VM {}: {}", 
+                suitableHosts.size(), vm.getId(),
+                suitableHosts.stream()
+                    .map(h -> h.getId())
+                    .collect(Collectors.toList()));
+        }
+        
+        // Attempt allocation with retry logic
+        Host bestHost = selectHost(vm, suitableHosts);
+        
+        if (bestHost == null) {
+            logger.warn("No suitable host found for VM {} after selectHost", vm.getId());
+            return HostSuitability.NULL;
+        }
+        
+        boolean allocated = performAllocation(vm, bestHost);
+        
+        // Record allocation time
+        long allocationTime = System.currentTimeMillis() - startTime;
+        
+        if (allocated) {
+            successfulAllocations++;
+            logger.info("Successfully allocated VM {} to host {} in {} ms after {} attempts", 
+                vm.getId(), bestHost.getId(), allocationTime, MAX_RETRY_ATTEMPTS);
+            
+            // Collect metrics if available
+            // if (metricsCollector != null) {
+            //     metricsCollector.recordVmAllocation(vm, bestHost, allocationTime);
+            // }
+            vmToHostMap.put(vm.getId(), bestHost);
+            allocationTimestamps.put(vm.getId(), System.currentTimeMillis());
+            
+            // Log resource utilization after allocation
+            if (detailedLogging) {
+                logHostUtilization(bestHost);
+            }
+            return HostSuitability.NULL;
+        } else {
+            failedAllocations++;
+            logger.error("Failed to allocate VM {} after {} attempts in {} ms", 
+                vm.getId(), MAX_RETRY_ATTEMPTS, allocationTime);
+            
+            // Optionally record failure, but no method exists
+            return HostSuitability.NULL;
+        }
+        
+    } catch (Exception e) {
+        logger.error("Unexpected error during VM {} allocation: {}", 
+            vm.getId(), e.getMessage(), e);
+        failedAllocations++;
+        return HostSuitability.NULL;
+    }
     }
     
     /**

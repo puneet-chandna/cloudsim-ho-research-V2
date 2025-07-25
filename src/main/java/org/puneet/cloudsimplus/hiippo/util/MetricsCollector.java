@@ -540,4 +540,87 @@ public class MetricsCollector {
     public List<Double> getFitnessHistory() {
         return new ArrayList<>(fitnessHistory);
     }
+    
+    public double calculateAverageCpuUtilization(List<Host> hosts) {
+        if (hosts == null || hosts.isEmpty()) {
+            return 0.0;
+        }
+        
+        double totalUtilization = hosts.stream()
+            .mapToDouble(host -> {
+                try {
+                    return host.getCpuPercentUtilization();
+                } catch (Exception e) {
+                    logger.warn("Could not get CPU utilization for host: {}", host.getId());
+                    return 0.0;
+                }
+            })
+            .sum();
+        
+        return totalUtilization / hosts.size();
+    }
+    
+    public double calculateAverageRamUtilization(List<Host> hosts) {
+        if (hosts == null || hosts.isEmpty()) {
+            return 0.0;
+        }
+        
+        double totalUtilization = hosts.stream()
+            .mapToDouble(host -> {
+                try {
+                    // Use RAM utilization calculation
+                    long totalRam = host.getRam().getCapacity();
+                    long usedRam = totalRam - host.getRam().getAvailableResource();
+                    return totalRam > 0 ? (double) usedRam / totalRam * 100.0 : 0.0;
+                } catch (Exception e) {
+                    logger.warn("Could not get RAM utilization for host: {}", host.getId());
+                    return 0.0;
+                }
+            })
+            .sum();
+        
+        return totalUtilization / hosts.size();
+    }
+    
+    public double calculateTotalPowerConsumption(List<Host> hosts) {
+        if (hosts == null || hosts.isEmpty()) {
+            return 0.0;
+        }
+        
+        return hosts.stream()
+            .mapToDouble(host -> {
+                try {
+                    PowerModel powerModel = host.getPowerModel();
+                    if (powerModel != null) {
+                        // Use CPU utilization for power calculation
+                        double cpuUtil = host.getCpuPercentUtilization();
+                        return powerModel.getPower(); // PowerModel.getPower() takes no arguments in CloudSim Plus 8.0.0
+                    }
+                    return 0.0;
+                } catch (Exception e) {
+                    logger.warn("Could not get power consumption for host: {}", host.getId());
+                    return 0.0;
+                }
+            })
+            .sum();
+    }
+    
+    public int countSLAViolations(List<Cloudlet> cloudlets) {
+        if (cloudlets == null || cloudlets.isEmpty()) {
+            return 0;
+        }
+        
+        return (int) cloudlets.stream()
+            .filter(cloudlet -> {
+                try {
+                    // Check if cloudlet execution time exceeds SLA threshold
+                    double executionTime = cloudlet.getFinishTime() - cloudlet.getSubmissionDelay();
+                    return executionTime > SLA_RESPONSE_TIME_THRESHOLD;
+                } catch (Exception e) {
+                    logger.warn("Could not check SLA violation for cloudlet: {}", cloudlet.getId());
+                    return false;
+                }
+            })
+            .count();
+    }
 }

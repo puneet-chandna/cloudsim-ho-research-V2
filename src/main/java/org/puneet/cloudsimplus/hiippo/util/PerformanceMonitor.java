@@ -637,5 +637,13 @@ public class PerformanceMonitor {
                 getTotalGcCount()
             );
         }
+        
+        public double getExecutionTimeMillis() {
+            return duration;
+        }
+        
+        public double getPeakMemoryUsageMB() {
+            return peakMemoryUsage / (1024.0 * 1024.0);
+        }
     }
 }

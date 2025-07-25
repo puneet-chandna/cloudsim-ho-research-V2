@@ -615,7 +615,13 @@ public class StatisticalValidator {
         Map<String, ConfidenceInterval> intervals = new HashMap<>();
         for (Map.Entry<String, DescriptiveStatistics> entry : algorithmStats.entrySet()) {
             double[] data = entry.getValue().getValues();
-            intervals.put(entry.getKey(), ConfidenceInterval.computeOptimal(data, CONFIDENCE_LEVEL));
+            try {
+                intervals.put(entry.getKey(), ConfidenceInterval.computeOptimal(data, CONFIDENCE_LEVEL));
+            } catch (StatisticalValidationException e) {
+                logger.error("Failed to compute confidence interval for algorithm: {}", entry.getKey(), e);
+                // Create a default interval
+                intervals.put(entry.getKey(), new ConfidenceInterval(0.0, 0.0, 0.0, 0.0, CONFIDENCE_LEVEL, 0, "Error"));
+            }
         }
         return intervals;
     }
@@ -795,5 +801,56 @@ public class StatisticalValidator {
         public void setError(boolean error) { this.error = error; }
         public String getErrorMessage() { return errorMessage; }
         public void setErrorMessage(String message) { this.errorMessage = message; }
+    }
+    
+    public void validateScenarioResults(String scenario, Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) throws StatisticalValidationException {
+        logger.info("Validating scenario results for: {}", scenario);
+        
+        // Convert ExperimentResult objects to metric data for validation
+        Map<String, double[]> experimentResults = new HashMap<>();
+        
+        for (Map.Entry<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> entry : allResults.entrySet()) {
+            String algorithm = entry.getKey();
+            List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult> results = entry.getValue();
+            
+            // Extract CPU utilization data
+            double[] cpuData = results.stream()
+                .mapToDouble(r -> r.getResourceUtilCPU())
+                .toArray();
+            experimentResults.put(algorithm, cpuData);
+        }
+        
+        try {
+            ValidationResult result = validateResults(experimentResults, "ResourceUtilCPU");
+            logger.info("Validation completed for scenario: {}", scenario);
+        } catch (StatisticalValidationException e) {
+            logger.error("Statistical validation failed for scenario: {}", scenario, e);
+        } catch (Exception e) {
+            logger.error("Unexpected error during validation for scenario: {}", scenario, e);
+        }
+    }
+    
+    public ConfidenceInterval calculateConfidenceInterval(double[] data, double confidenceLevel) {
+        if (data == null || data.length == 0) {
+            return new ConfidenceInterval(0.0, 0.0, 0.0, 0.0, confidenceLevel, 0, "Empty Data");
+        }
+        
+        DescriptiveStatistics stats = new DescriptiveStatistics(data);
+        double mean = stats.getMean();
+        double stdDev = stats.getStandardDeviation();
+        int sampleSize = data.length;
+        
+        // Calculate t-critical value
+        TDistribution tDist = new TDistribution(sampleSize - 1);
+        double tCritical = tDist.inverseCumulativeProbability(1 - (1 - confidenceLevel) / 2);
+        
+        // Calculate margin of error
+        double marginOfError = tCritical * (stdDev / Math.sqrt(sampleSize));
+        double standardError = stdDev / Math.sqrt(sampleSize);
+        
+        double lowerBound = mean - marginOfError;
+        double upperBound = mean + marginOfError;
+        
+        return new ConfidenceInterval(lowerBound, upperBound, mean, standardError, confidenceLevel, sampleSize, "T-Distribution");
     }
 }

@@ -1,6 +1,7 @@
 package org.puneet.cloudsimplus.hiippo.baseline;
 
 import org.cloudsimplus.hosts.Host;
+import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.vms.Vm;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.policy.BaselineVmAllocationPolicy;
@@ -83,7 +84,7 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
      * @throws IllegalArgumentException if vm is null
      */
     @Override
-    public boolean allocateHostForVm(Vm vm) {
+    public HostSuitability allocateHostForVm(Vm vm) {
         // Input validation
         if (vm == null) {
             logger.error("Cannot allocate null VM");
@@ -94,7 +95,7 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
         if (vm.isCreated()) {
             logger.debug("VM {} is already allocated to Host {}", 
                 vm.getId(), vm.getHost().getId());
-            return true;
+            return HostSuitability.NULL;
         }
         
         logger.debug("Attempting to allocate VM {} using First-Fit algorithm", vm.getId());
@@ -107,7 +108,7 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
             if (!validateVmRequirements(vm)) {
                 logger.warn("VM {} has invalid resource requirements", vm.getId());
                 failedAllocations.incrementAndGet();
-                return false;
+                return HostSuitability.NULL;
             }
             
             // Get sorted list of hosts (by ID for consistency)
@@ -119,7 +120,7 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
             if (sortedHosts.isEmpty()) {
                 logger.error("No active hosts available for allocation");
                 failedAllocations.incrementAndGet();
-                return false;
+                return HostSuitability.NULL;
             }
             
             logger.debug("Searching through {} active hosts for VM {}", 
@@ -135,9 +136,9 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
                             host.getId(), vm.getId());
                         
                         // Attempt allocation
-                        boolean allocated = allocateHostForVm(vm, host);
+                        HostSuitability suitability = allocateHostForVm(vm, host);
                         
-                        if (allocated) {
+                        if (suitability != HostSuitability.NULL) {
                             // Track successful allocation
                             vmToHostMap.put(vm.getId(), host.getId());
                             successfulAllocations.incrementAndGet();
@@ -149,7 +150,7 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
                             logger.info("Successfully allocated VM {} to Host {} after {} attempts", 
                                 vm.getId(), host.getId(), attempts);
                             
-                            return true;
+                            return HostSuitability.NULL;
                         } else {
                             logger.warn("Allocation of VM {} to Host {} failed despite suitability check", 
                                 vm.getId(), host.getId());
@@ -171,13 +172,13 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
             failedAllocations.incrementAndGet();
             allocationAttempts.put(vm.getId(), attempts);
             
-            return false;
+            return HostSuitability.NULL;
             
         } catch (Exception e) {
             logger.error("Unexpected error during First-Fit allocation for VM {}: {}", 
                 vm.getId(), e.getMessage(), e);
             failedAllocations.incrementAndGet();
-            return false;
+            return HostSuitability.NULL;
         } finally {
             totalAllocationTime += (System.nanoTime() - startTime);
             

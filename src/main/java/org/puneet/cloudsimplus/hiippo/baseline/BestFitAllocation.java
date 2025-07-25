@@ -1,6 +1,7 @@
 package org.puneet.cloudsimplus.hiippo.baseline;
 
 import org.cloudsimplus.hosts.Host;
+import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.vms.Vm;
 import org.puneet.cloudsimplus.hiippo.policy.BaselineVmAllocationPolicy;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
@@ -173,7 +174,7 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
      * @throws IllegalArgumentException if vm is null
      */
     @Override
-    public boolean allocateHostForVm(Vm vm) {
+    public HostSuitability allocateHostForVm(Vm vm) {
         logger.debug("Starting BestFit allocation for VM {} (MIPS: {}, RAM: {} MB, BW: {} Mbps, Storage: {} GB)",
             vm.getId(), vm.getTotalMipsCapacity(), vm.getRam().getCapacity(),
             vm.getBw().getCapacity(), vm.getStorage().getCapacity());
@@ -191,21 +192,21 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
             // Check if VM is already allocated
             if (vm.getHost() != Host.NULL) {
                 logger.warn("VM {} is already allocated to Host {}", vm.getId(), vm.getHost().getId());
-                return false;
+                return HostSuitability.NULL;
             }
             
             // Find suitable hosts
             List<Host> suitableHosts = getHostList().stream().filter(h -> isHostSuitableForVm(h, vm)).collect(Collectors.toList());
             if (suitableHosts.isEmpty()) {
                 logger.warn("No suitable host found for VM {} - all hosts either full or unsuitable", vm.getId());
-                return false;
+                return HostSuitability.NULL;
             }
             
             // Select best host
             Host bestHost = selectHost(vm, suitableHosts);
             if (bestHost == null) {
                 logger.warn("No suitable host found for VM {} after selectHost", vm.getId());
-                return false;
+                return HostSuitability.NULL;
             }
             
             // Calculate waste before allocation for statistics
@@ -232,16 +233,16 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
                 if (cachingEnabled) {
                     clearCacheForHost(bestHost);
                 }
+                return HostSuitability.NULL;
             } else {
                 logger.error("Failed to allocate VM {} to selected Host {} despite suitability check",
                     vm.getId(), bestHost.getId());
+                return HostSuitability.NULL;
             }
-            
-            return allocated;
             
         } catch (Exception e) {
             logger.error("Unexpected error during BestFit allocation for VM {}", vm.getId(), e);
-            return false;
+            return HostSuitability.NULL;
         }
     }
     

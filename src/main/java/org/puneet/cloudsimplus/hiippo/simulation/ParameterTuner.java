@@ -9,6 +9,9 @@ import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.statistical.ConfidenceInterval;
 import org.puneet.cloudsimplus.hiippo.statistical.StatisticalValidator;
 import org.puneet.cloudsimplus.hiippo.util.*;
+import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
+import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
+import org.puneet.cloudsimplus.hiippo.simulation.ExperimentCoordinator.ScenarioSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,7 +102,11 @@ public class ParameterTuner {
         this.executorService = Executors.newFixedThreadPool(threadPoolSize);
         
         // Validate configuration arrays
-        validateConfigurationArrays();
+        try {
+            validateConfigurationArrays();
+        } catch (ValidationException e) {
+            throw new RuntimeException("Configuration validation failed", e);
+        }
         
         logger.info("ParameterTuner initialized with {} threads", threadPoolSize);
     }
@@ -425,15 +432,9 @@ public class ParameterTuner {
      * @param parameters Custom parameters to set
      */
     private void setCustomParameters(ParameterSet parameters) {
-        // Set static AlgorithmConstants (if used by HO)
-        AlgorithmConstants.DEFAULT_POPULATION_SIZE = parameters.getPopulationSize();
-        AlgorithmConstants.DEFAULT_MAX_ITERATIONS = parameters.getMaxIterations();
-        AlgorithmConstants.ALPHA = parameters.getAlpha();
-        AlgorithmConstants.BETA = parameters.getBeta();
-        AlgorithmConstants.GAMMA = parameters.getGamma();
-        AlgorithmConstants.W_UTILIZATION = parameters.getWeightUtilization();
-        AlgorithmConstants.W_POWER = parameters.getWeightPower();
-        AlgorithmConstants.W_SLA = parameters.getWeightSLA();
+        // Note: Cannot assign to static final variables in AlgorithmConstants
+        // The HO algorithm should use the parameters passed to it instead
+        logger.debug("Setting custom parameters for HO algorithm");
         // If HippopotamusOptimization uses a singleton or static config, update it here as well
         HippopotamusOptimization.setParameters(convertToHippopotamusParameters(parameters));
         logger.debug("Set custom HO parameters: {}", parameters);
@@ -445,14 +446,9 @@ public class ParameterTuner {
      * @param originalParams Original parameters to restore
      */
     private void restoreOriginalParameters(HippopotamusParameters originalParams) {
-        AlgorithmConstants.DEFAULT_POPULATION_SIZE = originalParams.getPopulationSize();
-        AlgorithmConstants.DEFAULT_MAX_ITERATIONS = originalParams.getMaxIterations();
-        AlgorithmConstants.ALPHA = originalParams.getAlpha();
-        AlgorithmConstants.BETA = originalParams.getBeta();
-        AlgorithmConstants.GAMMA = originalParams.getGamma();
-        AlgorithmConstants.W_UTILIZATION = originalParams.getWeightUtilization();
-        AlgorithmConstants.W_POWER = originalParams.getWeightPower();
-        AlgorithmConstants.W_SLA = originalParams.getWeightSLA();
+        // Note: Cannot assign to static final variables in AlgorithmConstants
+        // The HO algorithm should use the parameters passed to it instead
+        logger.debug("Restoring original parameters for HO algorithm");
         HippopotamusOptimization.setParameters(originalParams);
         logger.debug("Restored original HO parameters");
     }
@@ -557,9 +553,13 @@ public class ParameterTuner {
                 ParameterSet variedParams = baseParameters.copy();
                 variedParams.setParameter(parameterName, value);
                 
-                ParameterEvaluationResult evalResult = evaluateParameterSet(variedParams);
-                if (evalResult != null && evalResult.getMetrics() != null) {
-                    impacts.add(new ParameterImpact(value, evalResult.getMetrics()));
+                try {
+                    ParameterEvaluationResult evalResult = evaluateParameterSet(variedParams);
+                    if (evalResult != null && evalResult.getMetrics() != null) {
+                        impacts.add(new ParameterImpact(value, evalResult.getMetrics()));
+                    }
+                } catch (ValidationException e) {
+                    logger.warn("Failed to evaluate parameter {} with value {}: {}", parameterName, value, e.getMessage());
                 }
             }
         } else if (values instanceof double[]) {
@@ -567,9 +567,13 @@ public class ParameterTuner {
                 ParameterSet variedParams = baseParameters.copy();
                 variedParams.setParameter(parameterName, value);
                 
-                ParameterEvaluationResult evalResult = evaluateParameterSet(variedParams);
-                if (evalResult != null && evalResult.getMetrics() != null) {
-                    impacts.add(new ParameterImpact(value, evalResult.getMetrics()));
+                try {
+                    ParameterEvaluationResult evalResult = evaluateParameterSet(variedParams);
+                    if (evalResult != null && evalResult.getMetrics() != null) {
+                        impacts.add(new ParameterImpact(value, evalResult.getMetrics()));
+                    }
+                } catch (ValidationException e) {
+                    logger.warn("Failed to evaluate parameter {} with value {}: {}", parameterName, value, e.getMessage());
                 }
             }
         }
@@ -754,23 +758,38 @@ public class ParameterTuner {
         
         // Calculate averages for each metric
         double avgCpuUtil = validResults.stream()
-            .mapToDouble(r -> r.getMetrics().getOrDefault("ResourceUtilCPU", 0.0))
+            .mapToDouble(r -> {
+                Object value = r.getMetrics().getOrDefault("ResourceUtilCPU", 0.0);
+                return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+            })
             .average().orElse(0.0);
             
         double avgRamUtil = validResults.stream()
-            .mapToDouble(r -> r.getMetrics().getOrDefault("ResourceUtilRAM", 0.0))
+            .mapToDouble(r -> {
+                Object value = r.getMetrics().getOrDefault("ResourceUtilRAM", 0.0);
+                return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+            })
             .average().orElse(0.0);
             
         double avgPower = validResults.stream()
-            .mapToDouble(r -> r.getMetrics().getOrDefault("PowerConsumption", 0.0))
+            .mapToDouble(r -> {
+                Object value = r.getMetrics().getOrDefault("PowerConsumption", 0.0);
+                return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+            })
             .average().orElse(0.0);
             
         double avgSLA = validResults.stream()
-            .mapToDouble(r -> r.getMetrics().getOrDefault("SLAViolations", 0.0))
+            .mapToDouble(r -> {
+                Object value = r.getMetrics().getOrDefault("SLAViolations", 0.0);
+                return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+            })
             .average().orElse(0.0);
             
         double avgExecTime = validResults.stream()
-            .mapToDouble(r -> r.getMetrics().getOrDefault("ExecutionTime", 0.0))
+            .mapToDouble(r -> {
+                Object value = r.getMetrics().getOrDefault("ExecutionTime", 0.0);
+                return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+            })
             .average().orElse(0.0);
         
         avgMetrics.setCpuUtilization(avgCpuUtil);
@@ -801,7 +820,10 @@ public class ParameterTuner {
         for (String metric : metrics) {
             double[] values = results.stream()
                 .filter(r -> r != null && r.getMetrics() != null)
-                .mapToDouble(r -> r.getMetrics().getOrDefault(metric, 0.0))
+                .mapToDouble(r -> {
+                    Object value = r.getMetrics().getOrDefault(metric, 0.0);
+                    return value instanceof Number ? ((Number) value).doubleValue() : 0.0;
+                })
                 .toArray();
                 
             if (values.length > 0) {

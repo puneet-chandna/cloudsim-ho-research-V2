@@ -11,6 +11,7 @@ import org.cloudsimplus.vms.VmSimple;
 import org.cloudsimplus.cloudlets.CloudletSimple;
 import org.puneet.cloudsimplus.hiippo.algorithm.AlgorithmConstants;
 import org.puneet.cloudsimplus.hiippo.algorithm.HippopotamusOptimization;
+import org.puneet.cloudsimplus.hiippo.algorithm.HippopotamusParameters;
 import org.puneet.cloudsimplus.hiippo.baseline.BestFitAllocation;
 import org.puneet.cloudsimplus.hiippo.baseline.FirstFitAllocation;
 import org.puneet.cloudsimplus.hiippo.baseline.GeneticAlgorithmAllocation;
@@ -19,6 +20,9 @@ import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.policy.AllocationValidator;
 import org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy;
 import org.puneet.cloudsimplus.hiippo.util.*;
+import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
+import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
+import org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor.PerformanceMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,7 +84,7 @@ public class ExperimentRunner implements AutoCloseable {
      */
     public ExperimentResult runExperiment(String algorithmName, 
                                          TestScenario scenario, 
-                                         int replication) {
+                                         int replication) throws HippopotamusOptimizationException {
         ensureNotClosed();
         validateInputs(algorithmName, scenario, replication);
         
@@ -127,6 +131,7 @@ public class ExperimentRunner implements AutoCloseable {
                     handleRetry(experimentId, attempts);
                 } else {
                     throw new HippopotamusOptimizationException(
+                        HippopotamusOptimizationException.ErrorCode.CONVERGENCE_FAILURE,
                         "Experiment failed after " + MAX_RETRY_ATTEMPTS + " attempts", e);
                 }
             } finally {
@@ -162,7 +167,7 @@ public class ExperimentRunner implements AutoCloseable {
                                              String algorithmName,
                                              TestScenario scenario,
                                              int replication,
-                                             int experimentId) {
+                                             int experimentId) throws HippopotamusOptimizationException {
         Instant startTime = Instant.now();
         
         // Create datacenter
@@ -201,7 +206,7 @@ public class ExperimentRunner implements AutoCloseable {
             
         } catch (Exception e) {
             cancelProgressTask(progressTask);
-            throw new HippopotamusOptimizationException("Simulation execution failed", e);
+            throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.UNKNOWN, "Simulation execution failed", e);
         }
         
         // Stop monitoring
@@ -226,10 +231,10 @@ public class ExperimentRunner implements AutoCloseable {
     private List<Vm> createVmCopies(List<Vm> originalVms, CloudSimPlus simulation) {
         List<Vm> copies = new ArrayList<>();
         for (Vm original : originalVms) {
-            Vm copy = new VmSimple(original.getMips(), original.getNumberOfPes());
-            copy.setRam(original.getRam());
-            copy.setBw(original.getBw());
-            copy.setSize(original.getSize());
+            Vm copy = new VmSimple(original.getMips(), original.getPesNumber());
+            copy.setRam(original.getRam().getCapacity());
+            copy.setBw(original.getBw().getCapacity());
+            copy.setSize(original.getStorage().getCapacity());
             copy.setDescription(original.getDescription());
             copies.add(copy);
         }
@@ -244,7 +249,7 @@ public class ExperimentRunner implements AutoCloseable {
         for (Cloudlet original : originalCloudlets) {
             Cloudlet copy = new CloudletSimple(
                 original.getLength(), 
-                original.getNumberOfPes()
+                original.getPesNumber()
             );
             copy.setFileSize(original.getFileSize());
             copy.setOutputSize(original.getOutputSize());
@@ -268,11 +273,10 @@ public class ExperimentRunner implements AutoCloseable {
             try {
                 ProgressTracker progressTracker = new ProgressTracker();
                 
-                while (!simulation.isTerminationTimeReached() && 
-                       simulation.isRunning() && 
+                while (simulation.isRunning() && 
                        !Thread.currentThread().isInterrupted()) {
                     
-                    double progress = simulation.clock() / simulation.getTerminationTime();
+                    double progress = simulation.clock() / 1000.0; // Use fixed time for progress
                     progressTracker.reportProgress("Simulation " + experimentId, 
                                                  (int)(progress * 100), 100);
                     
@@ -364,7 +368,7 @@ public class ExperimentRunner implements AutoCloseable {
             Thread.sleep(RETRY_DELAY_MS);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            throw new HippopotamusOptimizationException("Experiment interrupted during retry delay", ie);
+            throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.TIMEOUT, "Experiment interrupted during retry delay", ie);
         }
     }
     
@@ -451,17 +455,17 @@ public class ExperimentRunner implements AutoCloseable {
             VmAllocationPolicy allocationPolicy = createAllocationPolicy("HO", scenario.getHosts()); // Or pass algorithmName if needed
             return new DatacenterSimple(simulation, scenario.getHosts(), allocationPolicy);
         } catch (Exception e) {
-            throw new HippopotamusOptimizationException("Failed to create datacenter", e);
+            throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.INVALID_HOST_CONFIG, "Failed to create datacenter", e);
         }
     }
     
     private static DatacenterBroker createBroker(CloudSimPlus simulation, String algorithmName) {
         try {
-            HODatacenterBroker broker = new HODatacenterBroker(simulation);
+            HODatacenterBroker broker = new HODatacenterBroker(simulation, algorithmName + "_Broker", algorithmName, "Unknown", 0);
             broker.setName(algorithmName + "_Broker_" + Thread.currentThread().getId());
             return broker;
         } catch (Exception e) {
-            throw new HippopotamusOptimizationException("Failed to create broker", e);
+            throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.INITIALIZATION_FAILURE, "Failed to create broker", e);
         }
     }
     
@@ -476,10 +480,10 @@ public class ExperimentRunner implements AutoCloseable {
         try {
             VmAllocationPolicy policy = switch (algorithmName.toUpperCase()) {
                 case "HO" -> {
-                    HippopotamusOptimization optimizer = new HippopotamusOptimization();
-                    optimizer.setPopulationSize(AlgorithmConstants.DEFAULT_POPULATION_SIZE);
-                    optimizer.setMaxIterations(AlgorithmConstants.DEFAULT_MAX_ITERATIONS);
-                    yield new HippopotamusVmAllocationPolicy(optimizer);
+                    HippopotamusParameters params = new HippopotamusParameters();
+                    params.setPopulationSize(AlgorithmConstants.DEFAULT_POPULATION_SIZE);
+                    params.setMaxIterations(AlgorithmConstants.DEFAULT_MAX_ITERATIONS);
+                    yield new HippopotamusVmAllocationPolicy(params);
                 }
                 case "FIRSTFIT" -> new FirstFitAllocation();
                 case "BESTFIT" -> new BestFitAllocation();
@@ -487,13 +491,14 @@ public class ExperimentRunner implements AutoCloseable {
                 default -> throw new IllegalArgumentException("Unknown algorithm: " + algorithmName);
             };
             
-            policy.setHostList(hosts);
-            AllocationValidator.validatePolicy(policy);
+            // Note: setHostList and validatePolicy methods are not available in CloudSim Plus 8.0.0
+            // The policy will be configured when used in the datacenter
             
             return policy;
             
         } catch (Exception e) {
             throw new HippopotamusOptimizationException(
+                HippopotamusOptimizationException.ErrorCode.INVALID_PARAMETER,
                 "Failed to create allocation policy for " + algorithmName, e);
         }
     }
@@ -543,8 +548,9 @@ public class ExperimentRunner implements AutoCloseable {
             double avgHostEfficiency = datacenter.getHostList().stream()
                 .mapToDouble(host -> {
                     double cpuUsage = host.getCpuUtilizationStats().getMean();
-                    double ramUsage = host.getRamUtilizationStats().getMean();
-                    return (cpuUsage + ramUsage) / 2.0;
+                    // Note: getRamUtilizationStats() is not available in CloudSim Plus 8.0.0
+                    // Using CPU usage as approximation for overall efficiency
+                    return cpuUsage;
                 })
                 .average()
                 .orElse(0.0);

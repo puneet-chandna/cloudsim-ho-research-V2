@@ -1,6 +1,7 @@
 package org.puneet.cloudsimplus.hiippo.baseline;
 
 import org.cloudsimplus.hosts.Host;
+import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.vms.Vm;
 import org.puneet.cloudsimplus.hiippo.algorithm.AlgorithmConstants;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
@@ -70,10 +71,35 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
      * @return true if allocation was successful, false otherwise
      */
     @Override
-    public boolean allocateHostForVm(Vm vm) {
-        // This method is now just a placeholder.
-        // The main logic will be in placeAllVms().
-        return true; 
+    public HostSuitability allocateHostForVm(Vm vm) {
+        if (vm == null) {
+            logger.error("Cannot allocate null VM");
+            return HostSuitability.NULL;
+        }
+        // If the VM is already allocated, do not reallocate
+        if (isVmAllocated(vm)) {
+            logger.warn("VM {} is already allocated to a host", vm.getId());
+            return HostSuitability.NULL;
+        }
+        // Use the superclass logic to find a suitable host for this VM
+        List<Host> suitableHosts = findSuitableHosts(vm);
+        if (suitableHosts.isEmpty()) {
+            logger.warn("No suitable host found for VM {}", vm.getId());
+            return HostSuitability.NULL;
+        }
+        Host selectedHost = selectHost(vm, suitableHosts);
+        if (selectedHost == null) {
+            logger.warn("No host selected for VM {} after selectHost", vm.getId());
+            return HostSuitability.NULL;
+        }
+        boolean allocated = performAllocation(vm, selectedHost);
+        if (allocated) {
+            logger.info("Allocated VM {} to Host {} using GA fallback", vm.getId(), selectedHost.getId());
+            return HostSuitability.NULL;
+        } else {
+            logger.error("Failed to allocate VM {} to Host {} using GA fallback", vm.getId(), selectedHost.getId());
+            return HostSuitability.NULL;
+        }
     }
 
     /**
@@ -766,8 +792,8 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
                 }
             }
         }
-        hostMipsAllocation.put(i, totalAllocatedMips);
-        hostRamAllocation.put(i, host.getRam().getCapacity() - host.getRam().getAvailableResource());
+        hostMipsAllocation.put(i, (double) totalAllocatedMips);
+        hostRamAllocation.put(i, (double) (host.getRam().getCapacity() - host.getRam().getAvailableResource()));
     }
     
     // Add allocations from solution
@@ -776,8 +802,8 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
         if (hostIndex >= 0 && hostIndex < hosts.size()) {
             Vm vm = vms.get(i);
             
-            hostMipsAllocation.merge(hostIndex, vm.getTotalMipsCapacity(), Double::sum);
-            hostRamAllocation.merge(hostIndex, vm.getRam().getCapacity(), Double::sum);
+            hostMipsAllocation.merge(hostIndex, (double) vm.getTotalMipsCapacity(), Double::sum);
+            hostRamAllocation.merge(hostIndex, (double) vm.getRam().getCapacity(), Double::sum);
         }
     }
     
@@ -982,7 +1008,8 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
             if (hostIndex >= 0 && hostIndex < hosts.size()) {
                 Host host = hosts.get(hostIndex);
                 
-                if (!allocateHostForVm(vm, host)) {
+                HostSuitability suitability = allocateHostForVm(vm);
+                if (suitability == HostSuitability.NULL) {
                     logger.error("Failed to allocate VM {} to host {} as determined by GA", 
                                vm.getId(), host.getId());
                     allSuccess = false;

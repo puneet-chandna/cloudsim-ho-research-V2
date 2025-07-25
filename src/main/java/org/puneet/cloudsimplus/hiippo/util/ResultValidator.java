@@ -33,7 +33,7 @@ public class ResultValidator {
      * @param result The experiment result to validate
      * @throws ValidationException if validation fails
      */
-    public static void validateResults(ExperimentResult result) {
+    public static void validateResults(ExperimentResult result) throws ValidationException {
         if (result == null) {
             throw new ValidationException("Experiment result cannot be null");
         }
@@ -41,39 +41,32 @@ public class ResultValidator {
         logger.info("Starting validation for algorithm: {}, scenario: {}, replication: {}", 
             result.getAlgorithm(), result.getScenario(), result.getReplication());
         
-        try {
-            // Validate basic metrics
-            validateBasicMetrics(result);
-            
-            // Validate VM placement
-            validateVmPlacement(result);
-            
-            // Validate resource utilization
-            validateResourceUtilization(result);
-            
-            // Validate power consumption
-            validatePowerConsumption(result);
-            
-            // Validate SLA violations
-            validateSlaViolations(result);
-            
-            // Validate execution time
-            validateExecutionTime(result);
-            
-            // Validate convergence data
-            validateConvergenceData(result);
-            
-            // Validate statistical consistency
-            validateStatisticalConsistency(result);
-            
-            logger.info("Validation completed successfully for algorithm: {}, scenario: {}, replication: {}", 
-                result.getAlgorithm(), result.getScenario(), result.getReplication());
-                
-        } catch (ValidationException e) {
-            logger.error("Validation failed for algorithm: {}, scenario: {}, replication: {} - {}", 
-                result.getAlgorithm(), result.getScenario(), result.getReplication(), e.getMessage());
-            throw e;
-        }
+        // Validate basic metrics
+        validateBasicMetrics(result);
+        
+        // Validate VM placement
+        validateVmPlacement(result);
+        
+        // Validate resource utilization
+        validateResourceUtilization(result);
+        
+        // Validate power consumption
+        validatePowerConsumption(result);
+        
+        // Validate SLA violations
+        validateSlaViolations(result);
+        
+        // Validate execution time
+        validateExecutionTime(result);
+        
+        // Validate convergence data
+        validateConvergenceData(result);
+        
+        // Validate statistical consistency
+        validateStatisticalConsistency(result);
+        
+        logger.info("Validation completed successfully for algorithm: {}, scenario: {}, replication: {}", 
+            result.getAlgorithm(), result.getScenario(), result.getReplication());
     }
     
     /**
@@ -82,7 +75,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if basic metrics are invalid
      */
-    private static void validateBasicMetrics(ExperimentResult result) {
+    private static void validateBasicMetrics(ExperimentResult result) throws ValidationException {
         if (result.getAlgorithm() == null || result.getAlgorithm().trim().isEmpty()) {
             throw new ValidationException("Algorithm name cannot be null or empty");
         }
@@ -110,7 +103,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if VM placement is invalid
      */
-    private static void validateVmPlacement(ExperimentResult result) {
+    private static void validateVmPlacement(ExperimentResult result) throws ValidationException {
         List<Vm> vms = result.getVms();
         List<Host> hosts = result.getHosts();
         
@@ -265,7 +258,7 @@ public class ResultValidator {
             
         double totalUsed = hosts.stream()
             .mapToDouble(host -> host.getTotalMipsCapacity() - 
-                host.getVmScheduler().getAvailableMips())
+                host.getVmScheduler().getTotalAvailableMips())
             .sum();
             
         return totalCapacity > 0 ? totalUsed / totalCapacity : 0.0;

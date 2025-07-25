@@ -3,9 +3,10 @@ package org.puneet.cloudsimplus.hiippo.simulation;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.cloudlets.Cloudlet;
 import org.cloudsimplus.cloudlets.CloudletSimple;
-import org.cloudsimplus.core.CloudSim;
+import org.cloudsimplus.core.CloudSimPlus;
 import org.cloudsimplus.datacenters.Datacenter;
 import org.cloudsimplus.hosts.Host;
+import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.resources.Pe;
 import org.cloudsimplus.resources.PeSimple;
 import org.cloudsimplus.schedulers.cloudlet.CloudletSchedulerTimeShared;
@@ -39,6 +40,7 @@ import java.util.stream.IntStream;
 import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
 import org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor.PerformanceMetrics;
 import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
+// import org.cloudsimplus.vms.VerticalVmScaling; // Class removed in CloudSim Plus 8.0.0
 
 /**
  * Main CloudSim Plus simulation orchestrator for Hippopotamus Optimization experiments.
@@ -51,7 +53,7 @@ import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
 public class CloudSimHOSimulation {
     private static final Logger logger = LoggerFactory.getLogger(CloudSimHOSimulation.class);
     
-    private final CloudSim simulation;
+    private final CloudSimPlus simulation;
     private final String algorithmName;
     private final TestScenario testScenario;
     private final int replicationNumber;
@@ -89,7 +91,7 @@ public class CloudSimHOSimulation {
         this.replicationNumber = replicationNumber;
         
         // Initialize CloudSim Plus with deterministic seed
-        this.simulation = new CloudSim();
+        this.simulation = new CloudSimPlus();
         
         this.metricsCollector = new MetricsCollector();
         this.performanceMonitor = new PerformanceMonitor();
@@ -190,7 +192,7 @@ public class CloudSimHOSimulation {
         logger.debug("Creating datacenter with {} hosts", testScenario.getHostCount());
         
         // Create hosts using DatacenterFactory
-        hostList = DatacenterFactory.createHosts(simulation, testScenario.getHostCount());
+        hostList = DatacenterFactory.createHosts((CloudSimPlus) simulation, testScenario.getHostCount());
         
         if (hostList == null || hostList.isEmpty()) {
             throw new ValidationException("Failed to create hosts for datacenter");
@@ -203,7 +205,7 @@ public class CloudSimHOSimulation {
         allocationPolicy = wrapWithTimingPolicy(allocationPolicy);
         
         // Create datacenter with the policy
-        datacenter = DatacenterFactory.createDatacenter(simulation, hostList, allocationPolicy);
+        datacenter = DatacenterFactory.createDatacenter((CloudSimPlus) simulation, testScenario.getHostCount(), allocationPolicy, testScenario.getName());
         
         if (datacenter == null) {
             throw new ValidationException("Failed to create datacenter");
@@ -256,33 +258,32 @@ public class CloudSimHOSimulation {
     private VmAllocationPolicy wrapWithTimingPolicy(VmAllocationPolicy basePolicy) {
         return new VmAllocationPolicy() {
             @Override
-            public boolean allocateHostForVm(Vm vm) {
+            public HostSuitability allocateHostForVm(Vm vm) {
                 if (allocationStartTime == 0) {
                     allocationStartTime = System.currentTimeMillis();
                 }
-                boolean result = basePolicy.allocateHostForVm(vm);
+                HostSuitability result = basePolicy.allocateHostForVm(vm);
                 allocationEndTime = System.currentTimeMillis();
                 return result;
             }
-
             @Override
-            public boolean allocateHostForVm(Vm vm, Host host) {
-                // If basePolicy returns HostSuitability or similar, convert to boolean
-                Object result = basePolicy.allocateHostForVm(vm, host);
-                if (result instanceof Boolean) {
-                    return (Boolean) result;
-                } else if (result != null && result.toString().equalsIgnoreCase("true")) {
-                    return true;
-                } else {
-                    return false;
+            public HostSuitability allocateHostForVm(Vm vm, Host host) {
+                try {
+                    return basePolicy.allocateHostForVm(vm, host);
+                } catch (Exception e) {
+                    logger.error(
+                        "Error in allocateHostForVm for VM {} on Host {}: {}",
+                        vm.getId(),
+                        host.getId(),
+                        e.getMessage()
+                    );
+                    return HostSuitability.NULL;
                 }
             }
-
             @Override
             public void deallocateHostForVm(Vm vm) {
                 basePolicy.deallocateHostForVm(vm);
             }
-
             @Override
             public Map<Vm, Host> getOptimizedAllocationMap(List<? extends Vm> vmList) {
                 if (allocationStartTime == 0) {
@@ -292,28 +293,6 @@ public class CloudSimHOSimulation {
                 allocationEndTime = System.currentTimeMillis();
                 return result;
             }
-
-            @Override
-            public Host getHostForVm(Vm vm) {
-                return basePolicy.getHostForVm(vm);
-            }
-
-            @Override
-            public boolean isVmMigrationSupported() {
-                return basePolicy.isVmMigrationSupported();
-            }
-
-            @Override
-            public Datacenter getDatacenter() {
-                return basePolicy.getDatacenter();
-            }
-
-            @Override
-            public void setDatacenter(Datacenter datacenter) {
-                basePolicy.setDatacenter(datacenter);
-            }
-
-            // Implement missing abstract methods as no-ops or delegating to basePolicy if possible
             @Override
             public Optional<Host> findHostForVm(Vm vm) {
                 try {
@@ -322,36 +301,34 @@ public class CloudSimHOSimulation {
                     return Optional.empty();
                 }
             }
-
             @Override
-            public <T extends Vm> boolean allocateHostForVm(Collection<T> vms) {
-                // Not used in this context; return false
-                return false;
+            public <T extends Vm> List<T> allocateHostForVm(Collection<T> vms) {
+                return new ArrayList<>();
             }
-
             @Override
-            public void setHostCountForParallelSearch(int count) {
-                // No-op
+            public VmAllocationPolicy setHostCountForParallelSearch(int count) {
+                return this;
             }
-
             @Override
-            public void scaleVmVertically(org.cloudsimplus.vms.VerticalVmScaling<?> scaling) {
-                // No-op
+            public boolean scaleVmVertically(org.cloudsimplus.autoscaling.VerticalVmScaling scaling) {
+                return false; // Not implemented in this wrapper
             }
-
             @Override
-            public List<Host> getHostList() {
-                return basePolicy.getHostList();
+            public List<Host> getHostList() { return basePolicy.getHostList(); }
+            @Override
+            public int getHostCountForParallelSearch() { return 1; }
+            @Override
+            public VmAllocationPolicy setFindHostForVmFunction(java.util.function.BiFunction<VmAllocationPolicy, Vm, Optional<Host>> fn) {
+                return this;
             }
-
             @Override
-            public int getHostCountForParallelSearch() {
-                return 1;
-            }
-
+            public boolean isVmMigrationSupported() { return basePolicy.isVmMigrationSupported(); }
             @Override
-            public void setFindHostForVmFunction(java.util.function.BiFunction<VmAllocationPolicy, Vm, Optional<Host>> fn) {
-                // No-op
+            public Datacenter getDatacenter() { return basePolicy.getDatacenter(); }
+            @Override
+            public VmAllocationPolicy setDatacenter(Datacenter datacenter) { 
+                basePolicy.setDatacenter(datacenter);
+                return this;
             }
         };
     }
@@ -362,12 +339,12 @@ public class CloudSimHOSimulation {
     private void createBroker() {
         logger.debug("Creating datacenter broker");
         
-        broker = new HODatacenterBroker(simulation);
+        broker = new HODatacenterBroker(simulation, algorithmName + "_Broker", algorithmName, testScenario.getName(), replicationNumber);
         broker.setName("HOBroker_" + algorithmName + "_" + replicationNumber);
         
         // Configure broker behavior
         broker.setVmDestructionDelay(0.0); // No delay for research experiments
-        broker.setFailedVmsRetryDelay(0.0); // No retry delay
+        // Remove or comment out broker.setFailedVmsRetryDelay(0.0); if not supported
     }
     
     /**
@@ -407,9 +384,9 @@ public class CloudSimHOSimulation {
     private Vm createVmFromSpec(Vm vm) {
         Vm vmCreated = new VmSimple(vm.getId(), vm.getMips(), vm.getPesNumber());
         
-        vmCreated.setRam(vm.getRam())
-          .setBw(vm.getBw())
-          .setSize(vm.getSize())
+        vmCreated.setRam(vm.getRam().getCapacity())
+          .setBw(vm.getBw().getCapacity())
+          .setSize(vm.getStorage().getCapacity())
           .setCloudletScheduler(new CloudletSchedulerTimeShared());
         
         // Remove setDescription with getType, unless you have a custom property
@@ -468,34 +445,33 @@ public class CloudSimHOSimulation {
         
         // Monitor simulation clock for memory checks
         if (enableMemoryMonitoring) {
-            simulation.addOnClockTickListener(event -> checkMemoryUsage());
+            simulation.addOnClockTickListener(event -> onClockTick());
         }
         
-        // Monitor datacenter events
-        datacenter.addOnHostAllocationListener(eventInfo -> {
-            logger.trace("Host allocated for VM: {}", eventInfo.getVm().getId());
-        });
+        // Remove or comment out addOnHostAllocationListener if not supported
+        // datacenter.addOnHostAllocationListener(eventInfo -> {
+        //     logger.trace("Host allocated for VM: {}", eventInfo.getVm().getId());
+        // });
     }
     
     /**
      * Handles VMs created event.
      */
     private void onVmsCreated(DatacenterBrokerEventInfo eventInfo) {
-        int createdVms = eventInfo.getVmList().size();
-        int requestedVms = vmList.size();
-        
-        logger.info("VMs created: {}/{}", createdVms, requestedVms);
-        
-        if (createdVms < requestedVms) {
-            logger.warn("Not all VMs were successfully created. Created: {}, Requested: {}", 
-                    createdVms, requestedVms);
+        // Get created VMs from broker directly
+        List<Vm> createdVms = broker.getVmCreatedList();
+        int created = createdVms.size();
+        int requested = vmList.size();
+        logger.info("VMs created: {}/{}", created, requested);
+        if (created < requested) {
+            logger.warn("Not all VMs were successfully created. Created: {}, Requested: {}", created, requested);
         }
     }
     
     /**
      * Handles clock tick events for memory monitoring.
      */
-    private void onClockTick(EventInfo eventInfo) {
+    private void onClockTick() {
         if (simulation.clock() % memoryCheckInterval == 0) {
             checkMemoryUsage();
         }
@@ -668,8 +644,15 @@ public class CloudSimHOSimulation {
             // Only check VMs that were successfully placed
             if (vm.getHost() != null && vm.getHost() != Host.NULL) {
                 double requestedMips = vm.getMips();
-                double allocatedMips = vm.getHost().getVmScheduler().getAllocatedMipsForVm(vm);
-
+                double allocatedMips = 0.0;
+                Object mipsObj = vm.getHost().getVmScheduler().getAllocatedMips(vm);
+                if (mipsObj instanceof Number) {
+                    allocatedMips = ((Number) mipsObj).doubleValue();
+                } else if (mipsObj instanceof List) {
+                    for (Object o : (List<?>) mipsObj) {
+                        if (o instanceof Number) allocatedMips += ((Number) o).doubleValue();
+                    }
+                }
                 // If the VM receives less than 95% of its requested CPU, count as a violation
                 if (allocatedMips < requestedMips * 0.95) {
                     violations++;

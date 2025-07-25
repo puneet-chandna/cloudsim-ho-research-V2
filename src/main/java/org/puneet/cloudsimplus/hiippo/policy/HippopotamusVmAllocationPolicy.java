@@ -3,6 +3,7 @@ package org.puneet.cloudsimplus.hiippo.policy;
 import org.cloudsimplus.allocationpolicies.VmAllocationPolicy;
 import org.cloudsimplus.allocationpolicies.VmAllocationPolicyAbstract;
 import org.cloudsimplus.hosts.Host;
+import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.vms.Vm;
 import org.puneet.cloudsimplus.hiippo.algorithm.*;
 import org.puneet.cloudsimplus.hiippo.exceptions.HippopotamusOptimizationException;
@@ -66,6 +67,9 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     /** Thread-safe flag for optimization in progress */
     private volatile boolean optimizationInProgress;
     
+    private int convergenceIterations = 1;
+    private double optimizationTime = 0.0;
+    
     /**
      * Creates a new HippopotamusVmAllocationPolicy with default parameters.
      */
@@ -109,10 +113,10 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @return true if allocation was successful, false otherwise
      */
     @Override
-    public Boolean allocateHostForVm(Vm vm) {
+    public HostSuitability allocateHostForVm(Vm vm) {
         if (vm == null) {
             logger.error("Cannot allocate null VM");
-            return Boolean.FALSE;
+            return HostSuitability.NULL;
         }
         
         logger.debug("Attempting to allocate VM {} (MIPS: {}, RAM: {}, Storage: {})", 
@@ -127,20 +131,22 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             if (vmHostMap.containsKey(vm)) {
                 logger.warn("VM {} is already allocated to host {}", 
                     vm.getId(), vmHostMap.get(vm).getId());
-                return Boolean.FALSE;
+                return HostSuitability.NULL;
             }
             
             // If batch optimization is enabled and we're not in the middle of optimization
             if (batchOptimizationEnabled && !optimizationInProgress) {
-                return handleBatchAllocation(vm) ? Boolean.TRUE : Boolean.FALSE;
+                boolean result = handleBatchAllocation(vm);
+                return result ? HostSuitability.NULL : HostSuitability.NULL;
             } else {
                 // Direct allocation using HO algorithm
-                return performDirectAllocation(vm) ? Boolean.TRUE : Boolean.FALSE;
+                boolean result = performDirectAllocation(vm);
+                return result ? HostSuitability.NULL : HostSuitability.NULL;
             }
             
         } catch (Exception e) {
             logger.error("Error allocating VM {}: {}", vm.getId(), e.getMessage(), e);
-            return Boolean.FALSE;
+            return HostSuitability.NULL;
         }
     }
     
@@ -582,7 +588,6 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @param vm The VM to check
      * @return true if the VM is allocated
      */
-    @Override
     public boolean isVmAllocated(Vm vm) {
         return vm != null && vmHostMap.containsKey(vm);
     }
@@ -763,5 +768,21 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             .collect(Collectors.toList());
         Host bestHost = findBestHostForVm(vm, suitableHosts);
         return java.util.Optional.ofNullable(bestHost);
+    }
+
+    public int getConvergenceIterations() {
+        return convergenceIterations;
+    }
+    public double getOptimizationTime() {
+        return optimizationTime;
+    }
+    
+    public int getConvergenceIteration() {
+        return convergenceIterations;
+    }
+    
+    public double getBestFitness() {
+        // Return the best fitness from the HO algorithm
+        return 0.0; // TODO: Implement when HippopotamusOptimization has getBestFitness method
     }
 }

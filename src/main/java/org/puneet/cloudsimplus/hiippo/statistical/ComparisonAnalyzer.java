@@ -733,6 +733,55 @@ public class ComparisonAnalyzer {
         return new HashMap<>(algorithmMetrics);
     }
     
+    public void analyzeAllResults(Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) {
+        logger.info("Analyzing all results for {} algorithms", allResults.size());
+        
+        // Convert ExperimentResult objects to metric data
+        for (Map.Entry<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> entry : allResults.entrySet()) {
+            String algorithm = entry.getKey();
+            List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult> results = entry.getValue();
+            
+            Map<String, List<Double>> algorithmData = new HashMap<>();
+            
+            // Extract metrics from results
+            List<Double> cpuUtil = results.stream()
+                .map(r -> r.getResourceUtilCPU())
+                .collect(Collectors.toList());
+            algorithmData.put("ResourceUtilCPU", cpuUtil);
+            
+            List<Double> ramUtil = results.stream()
+                .map(r -> r.getResourceUtilRAM())
+                .collect(Collectors.toList());
+            algorithmData.put("ResourceUtilRAM", ramUtil);
+            
+            List<Double> powerCons = results.stream()
+                .map(r -> r.getPowerConsumption())
+                .collect(Collectors.toList());
+            algorithmData.put("PowerConsumption", powerCons);
+            
+            List<Double> execTime = results.stream()
+                .map(r -> r.getExecutionTime())
+                .collect(Collectors.toList());
+            algorithmData.put("ExecutionTime", execTime);
+            
+            algorithmMetrics.put(algorithm, algorithmData);
+        }
+        
+        try {
+            performCompleteAnalysis();
+        } catch (Exception e) {
+            logger.error("Failed to analyze all results", e);
+        }
+    }
+    
+    public void generateComparisonData(Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) {
+        logger.info("Generating comparison data for {} algorithms", allResults.size());
+        
+        // This method would generate comparison data files
+        // Implementation similar to analyzeAllResults but focused on data generation
+        analyzeAllResults(allResults);
+    }
+    
     /**
      * Helper class to store algorithm scores.
      */

@@ -75,6 +75,7 @@ public class ScenarioGenerator {
         SPIKE("Sudden spikes"),
         WAVE("Wave-like pattern");
         
+        @SuppressWarnings("unused")
         private final String description;
         
         WorkloadPattern(String description) {
@@ -90,6 +91,7 @@ public class ScenarioGenerator {
         EXPONENTIAL("Many small, few large"),
         CUSTOM("Custom distribution");
         
+        @SuppressWarnings("unused")
         private final String description;
         
         VmSizeDistribution(String description) {
@@ -591,23 +593,32 @@ public class ScenarioGenerator {
             case INCREASING:
                 return new UtilizationModelDynamic(min)
                     .setMaxResourceUtilization(max)
-                    .setUtilizationUpdateFunction(time -> min + (max - min) * time / 1000.0);
+                    .setUtilizationUpdateFunction(um -> {
+                        double time = um.getTimeSpan();
+                        return min + (max - min) * time / 1000.0;
+                    });
                 
             case DECREASING:
                 return new UtilizationModelDynamic(max)
                     .setMaxResourceUtilization(max)
-                    .setUtilizationUpdateFunction(time -> max - (max - min) * time / 1000.0);
+                    .setUtilizationUpdateFunction(um -> {
+                        double time = um.getTimeSpan();
+                        return max - (max - min) * time / 1000.0;
+                    });
                 
             case PERIODIC:
                 return new UtilizationModelDynamic(min)
                     .setMaxResourceUtilization(max)
-                    .setUtilizationUpdateFunction(time -> 
-                        min + (max - min) * (1 + Math.sin(time / 100.0)) / 2);
+                    .setUtilizationUpdateFunction(um -> {
+                        double time = um.getTimeSpan();
+                        return min + (max - min) * (1 + Math.sin(time / 100.0)) / 2;
+                    });
                 
             case SPIKE:
                 return new UtilizationModelDynamic(min)
                     .setMaxResourceUtilization(max)
-                    .setUtilizationUpdateFunction(time -> {
+                    .setUtilizationUpdateFunction(um -> {
+                        double time = um.getTimeSpan();
                         // Spike every 300 time units
                         return ((time % 300) < 50) ? max : min;
                     });
@@ -615,8 +626,10 @@ public class ScenarioGenerator {
             case WAVE:
                 return new UtilizationModelDynamic(min)
                     .setMaxResourceUtilization(max)
-                    .setUtilizationUpdateFunction(time -> 
-                        min + (max - min) * Math.pow(Math.sin(time / 150.0), 2));
+                    .setUtilizationUpdateFunction(um -> {
+                        double time = um.getTimeSpan();
+                        return min + (max - min) * Math.pow(Math.sin(time / 150.0), 2);
+                    });
                 
             default:
                 return new UtilizationModelDynamic(0.5);
@@ -658,7 +671,8 @@ public class ScenarioGenerator {
             case IMBALANCED:
                 // Make some VMs much larger
                 for (int i = 0; i < vms.size() / 10; i++) {
-                    Vm vm = vms.get(random.nextInt(vms.size()));
+                    // Remove unused variable warning by not declaring 'vm' if not used
+                    //Vm vm = vms.get(random.nextInt(vms.size()));
                     // CloudSim VMs do not have setMips, so recreate VM if needed
                 }
                 break;
