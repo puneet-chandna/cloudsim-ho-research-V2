@@ -144,7 +144,7 @@ public class HODatacenterBroker extends DatacenterBrokerSimple {
             
         } catch (Exception e) {
             logger.error("Error during VM submission: {}", e.getMessage(), e);
-            throw new ValidationException("Failed to submit VMs: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to submit VMs: " + e.getMessage(), e);
         } finally {
             endTime = System.currentTimeMillis();
             totalSubmissionTime = endTime - startTime;

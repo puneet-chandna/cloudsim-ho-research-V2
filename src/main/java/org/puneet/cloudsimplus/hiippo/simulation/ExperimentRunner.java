@@ -171,11 +171,23 @@ public class ExperimentRunner implements AutoCloseable {
         Instant startTime = Instant.now();
         
         // Create datacenter
-        DatacenterSimple datacenter = createDatacenter(simulation, scenario);
+        DatacenterSimple datacenter;
+        try {
+            datacenter = createDatacenter(simulation, scenario);
+        } catch (ValidationException e) {
+            throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.INVALID_HOST_CONFIG, "Failed to create datacenter", e);
+        } catch (HippopotamusOptimizationException e) {
+            throw e; // Re-throw as is
+        }
         logger.debug("Created datacenter with {} hosts", scenario.getHosts().size());
         
         // Create broker
-        DatacenterBroker broker = createBroker(simulation, algorithmName);
+        DatacenterBroker broker;
+        try {
+            broker = createBroker(simulation, algorithmName);
+        } catch (HippopotamusOptimizationException e) {
+            throw e; // Re-throw as is
+        }
         logger.debug("Created broker for algorithm: {}", algorithmName);
         
         // Allocation policy is set in datacenter constructor, not after
@@ -362,7 +374,7 @@ public class ExperimentRunner implements AutoCloseable {
     /**
      * Handles retry with delay.
      */
-    private void handleRetry(int experimentId, int attempt) {
+    private void handleRetry(int experimentId, int attempt) throws HippopotamusOptimizationException {
         logger.info("Retrying experiment {} after {} ms delay", experimentId, RETRY_DELAY_MS);
         try {
             Thread.sleep(RETRY_DELAY_MS);
@@ -445,7 +457,7 @@ public class ExperimentRunner implements AutoCloseable {
     
     // Rest of the methods remain the same but with thread-local considerations...
     
-    private static DatacenterSimple createDatacenter(CloudSimPlus simulation, TestScenario scenario) {
+    private static DatacenterSimple createDatacenter(CloudSimPlus simulation, TestScenario scenario) throws ValidationException, HippopotamusOptimizationException {
         if (scenario.getHosts() == null || scenario.getHosts().isEmpty()) {
             throw new ValidationException("Test scenario must contain at least one host");
         }
@@ -459,7 +471,7 @@ public class ExperimentRunner implements AutoCloseable {
         }
     }
     
-    private static DatacenterBroker createBroker(CloudSimPlus simulation, String algorithmName) {
+    private static DatacenterBroker createBroker(CloudSimPlus simulation, String algorithmName) throws HippopotamusOptimizationException {
         try {
             HODatacenterBroker broker = new HODatacenterBroker(simulation, algorithmName + "_Broker", algorithmName, "Unknown", 0);
             broker.setName(algorithmName + "_Broker_" + Thread.currentThread().getId());
@@ -470,7 +482,7 @@ public class ExperimentRunner implements AutoCloseable {
     }
     
     private static VmAllocationPolicy createAllocationPolicy(String algorithmName, 
-                                                           List<Host> hosts) {
+                                                           List<Host> hosts) throws ValidationException, HippopotamusOptimizationException {
         if (hosts == null || hosts.isEmpty()) {
             throw new ValidationException("Host list cannot be null or empty");
         }
@@ -615,7 +627,7 @@ public class ExperimentRunner implements AutoCloseable {
         
         return result;
     }
-    private static void validateExperimentResult(ExperimentResult result) {
+    private static void validateExperimentResult(ExperimentResult result) throws ValidationException {
         List<String> validationErrors = new ArrayList<>();
         
         // Check required fields

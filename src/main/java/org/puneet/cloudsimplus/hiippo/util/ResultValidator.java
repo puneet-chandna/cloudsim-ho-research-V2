@@ -156,7 +156,7 @@ public class ResultValidator {
      * @param host The host to validate
      * @throws ValidationException if resource constraints are violated
      */
-    private static void validateHostResourceConstraints(Host host) {
+    private static void validateHostResourceConstraints(Host host) throws ValidationException {
         double totalCpuRequired = host.getVmList().stream()
             .mapToDouble(vm -> vm.getTotalMipsCapacity())
             .sum();
@@ -208,7 +208,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if utilization values are invalid
      */
-    private static void validateResourceUtilization(ExperimentResult result) {
+    private static void validateResourceUtilization(ExperimentResult result) throws ValidationException {
         double cpuUtil = result.getResourceUtilCPU();
         double ramUtil = result.getResourceUtilRAM();
         
@@ -289,7 +289,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if power consumption is invalid
      */
-    private static void validatePowerConsumption(ExperimentResult result) {
+    private static void validatePowerConsumption(ExperimentResult result) throws ValidationException {
         double power = result.getPowerConsumption();
         
         if (power < 0) {
@@ -313,7 +313,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if SLA violations are invalid
      */
-    private static void validateSlaViolations(ExperimentResult result) {
+    private static void validateSlaViolations(ExperimentResult result) throws ValidationException {
         double slaViolations = result.getSlaViolations();
         
         if (slaViolations < 0) {
@@ -332,7 +332,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if execution time is invalid
      */
-    private static void validateExecutionTime(ExperimentResult result) {
+    private static void validateExecutionTime(ExperimentResult result) throws ValidationException {
         double execTime = result.getExecutionTime();
         
         if (execTime < 0) {
@@ -386,7 +386,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if convergence data is invalid
      */
-    private static void validateConvergenceData(ExperimentResult result) {
+    private static void validateConvergenceData(ExperimentResult result) throws ValidationException {
         int convergenceIterations = result.getConvergenceIterations();
         
         if (convergenceIterations < 0) {
@@ -418,7 +418,7 @@ public class ResultValidator {
      * @param result The experiment result
      * @throws ValidationException if statistical consistency is violated
      */
-    private static void validateStatisticalConsistency(ExperimentResult result) {
+    private static void validateStatisticalConsistency(ExperimentResult result) throws ValidationException {
         // Check for NaN or Infinity values
         if (Double.isNaN(result.getResourceUtilCPU()) || 
             Double.isInfinite(result.getResourceUtilCPU())) {
@@ -458,7 +458,7 @@ public class ResultValidator {
      * @param results The list of results to validate
      * @throws ValidationException if any result in the batch is invalid
      */
-    public static void validateBatch(List<ExperimentResult> results) {
+    public static void validateBatch(List<ExperimentResult> results) throws ValidationException {
         if (results == null || results.isEmpty()) {
             throw new ValidationException("Result batch cannot be null or empty");
         }
@@ -503,7 +503,7 @@ public class ResultValidator {
      * @param hostCount The number of hosts
      * @throws ValidationException if scenario parameters are invalid
      */
-    public static void validateScenario(String scenarioName, int vmCount, int hostCount) {
+    public static void validateScenario(String scenarioName, int vmCount, int hostCount) throws ValidationException {
         if (scenarioName == null || scenarioName.trim().isEmpty()) {
             throw new ValidationException("Scenario name cannot be null or empty");
         }

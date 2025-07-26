@@ -300,14 +300,14 @@ public class DatacenterFactory {
      * @return The number of hosts for the scenario
      * @throws ValidationException if scenario is unknown
      */
-    private static int getHostCountForScenario(String scenario) {
+    private static int getHostCountForScenario(String scenario) throws ValidationException {
         return switch (scenario.toLowerCase()) {
             case "micro" -> 3;
             case "small" -> 10;
             case "medium" -> 20;
             case "large" -> 40;
             case "xlarge" -> 100;
-            default -> throw new IllegalArgumentException("Unknown scenario: " + scenario);
+            default -> throw new ValidationException("Unknown scenario: " + scenario);
         };
     }
     
