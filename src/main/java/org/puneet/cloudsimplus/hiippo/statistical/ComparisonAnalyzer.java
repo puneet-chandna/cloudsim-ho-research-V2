@@ -13,6 +13,7 @@ import org.puneet.cloudsimplus.hiippo.exceptions.StatisticalValidationException;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.util.ExperimentConfig;
 import org.puneet.cloudsimplus.hiippo.util.MemoryManager;
+import org.puneet.cloudsimplus.hiippo.util.RunManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +49,51 @@ public class ComparisonAnalyzer {
     private final List<String> metrics;
     
     // File paths
-    private static final String RAW_RESULTS_FILE = "results/raw_results/main_results.csv";
+    private static String getRawResultsFilePath() {
+        try {
+            RunManager runManager = RunManager.getInstance();
+            Path mainResultsPath = runManager.getMainResultsPath();
+            
+            // Check if the file exists
+            if (Files.exists(mainResultsPath)) {
+                return mainResultsPath.toString();
+            }
+            
+            // If file doesn't exist, try to find the most recent results file
+            Path resultsDir = runManager.getResultsPath();
+            if (Files.exists(resultsDir)) {
+                try {
+                    // Find the most recent main_results.csv file
+                    Path mostRecentFile = Files.walk(resultsDir)
+                        .filter(path -> path.getFileName().toString().equals("main_results.csv"))
+                        .max(Comparator.comparingLong(path -> {
+                            try {
+                                return Files.getLastModifiedTime(path).toMillis();
+                            } catch (IOException e) {
+                                return 0L;
+                            }
+                        }))
+                        .orElse(null);
+                    
+                    if (mostRecentFile != null && Files.exists(mostRecentFile)) {
+                        logger.info("Using most recent results file: {}", mostRecentFile);
+                        return mostRecentFile.toString();
+                    }
+                } catch (IOException e) {
+                    logger.warn("Error searching for recent results file: {}", e.getMessage());
+                }
+            }
+            
+            // If still no file found, create a default path
+            String defaultPath = resultsDir.resolve("raw_results").resolve("main_results.csv").toString();
+            logger.warn("Results file not found, using default path: {}", defaultPath);
+            return defaultPath;
+            
+        } catch (Exception e) {
+            logger.error("Error getting results file path: {}", e.getMessage());
+            return "results/main_results.csv"; // Fallback path
+        }
+    }
     private static final String COMPARISON_OUTPUT_DIR = "results/comparison_data";
     private static final String PAIRWISE_COMPARISON_FILE = "pairwise_comparisons.csv";
     private static final String EFFECT_SIZES_FILE = "effect_sizes.csv";
@@ -131,14 +176,15 @@ public class ComparisonAnalyzer {
      * @throws IOException if file reading fails
      */
     private void loadExperimentalResults() throws IOException {
-        logger.info("Loading experimental results from: {}", RAW_RESULTS_FILE);
+        String resultsPath = getRawResultsFilePath();
+        logger.info("Loading experimental results from: {}", resultsPath);
         
-        Path resultsPath = Paths.get(RAW_RESULTS_FILE);
-        if (!Files.exists(resultsPath)) {
-            throw new IOException("Results file not found: " + RAW_RESULTS_FILE);
+        Path path = Paths.get(resultsPath);
+        if (!Files.exists(path)) {
+            throw new IOException("Results file not found: " + resultsPath);
         }
         
-        try (FileReader reader = new FileReader(RAW_RESULTS_FILE);
+        try (FileReader reader = new FileReader(resultsPath);
              CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader())) {
             
             int recordCount = 0;

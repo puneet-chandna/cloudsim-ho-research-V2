@@ -1,17 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- Console Appender -->
+    <!-- Console Appender - Clean UI for Progress Only -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
     </appender>
     
-    <!-- File Appender for Main Application -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/cloudsim-ho.log</file>
+    <!-- Progress Console Appender - Shows only progress messages -->
+    <appender name="PROGRESS_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%msg%n</pattern>
+        </encoder>
+        <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+            <evaluator class="ch.qos.logback.classic.boolex.OnMarkerEvaluator">
+                <expression>marker.contains("PROGRESS")</expression>
+            </evaluator>
+            <OnMatch>ACCEPT</OnMatch>
+            <OnMismatch>DENY</OnMismatch>
+        </filter>
+    </appender>
+    
+    <!-- File Appender for Detailed Logs -->
+    <appender name="DETAILED_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/cloudsim-ho-detailed.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/cloudsim-ho-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>logs/cloudsim-ho-detailed-%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
@@ -20,15 +37,22 @@
         </encoder>
     </appender>
     
-    <!-- Separate File for Experiment Results -->
-    <appender name="EXPERIMENT" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/experiment-results.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/experiment-results-%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>60</maxHistory>
-        </rollingPolicy>
+    <!-- Run-specific Log File Appender -->
+    <appender name="RUN_LOG" class="ch.qos.logback.core.FileAppender">
+        <file>logs/run-${run.id:-default}.log</file>
         <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Error File Appender -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/errors.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n%ex{full}</pattern>
         </encoder>
     </appender>
     
@@ -52,49 +76,46 @@
         </encoder>
     </appender>
     
-    <!-- Error File Appender -->
-    <appender name="ERROR_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/errors.log</file>
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>ERROR</level>
-        </filter>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n%ex{full}</pattern>
-        </encoder>
-    </appender>
-    
     <!-- Logger Configuration -->
     
-    <!-- CloudSim Plus Logging -->
-    <logger name="org.cloudsimplus" level="WARN"/>
-    <logger name="org.cloudbus.cloudsim" level="WARN"/>
+    <!-- CloudSim Plus Logging - Redirect to file only -->
+    <logger name="org.cloudsimplus" level="WARN" additivity="false">
+        <appender-ref ref="DETAILED_FILE"/>
+    </logger>
+    <logger name="org.cloudbus.cloudsim" level="WARN" additivity="false">
+        <appender-ref ref="DETAILED_FILE"/>
+    </logger>
     
-    <!-- Application Loggers -->
-    <logger name="org.cloudsimplus.ho" level="INFO"/>
-    <logger name="org.cloudsimplus.ho.algorithm" level="DEBUG"/>
-    <logger name="org.cloudsimplus.ho.simulation" level="INFO"/>
-    <logger name="org.cloudsimplus.ho.util.MetricsCollector" level="DEBUG"/>
-    <logger name="org.cloudsimplus.ho.statistical" level="INFO"/>
+    <!-- Application Loggers - Redirect to file only -->
+    <logger name="org.puneet.cloudsimplus.hiippo" level="INFO" additivity="false">
+        <appender-ref ref="DETAILED_FILE"/>
+        <appender-ref ref="RUN_LOG"/>
+    </logger>
+    
+    <!-- Progress Logger - Shows in console -->
+    <logger name="org.puneet.cloudsimplus.hiippo.util.ProgressTracker" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="DETAILED_FILE"/>
+        <appender-ref ref="RUN_LOG"/>
+    </logger>
     
     <!-- Specialized Loggers -->
-    <logger name="org.cloudsimplus.ho.util.MemoryManager" level="INFO" additivity="false">
+    <logger name="org.puneet.cloudsimplus.hiippo.util.MemoryManager" level="INFO" additivity="false">
         <appender-ref ref="MEMORY"/>
-        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="DETAILED_FILE"/>
+        <appender-ref ref="RUN_LOG"/>
     </logger>
     
-    <logger name="org.cloudsimplus.ho.util.PerformanceMonitor" level="INFO" additivity="false">
+    <logger name="org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor" level="INFO" additivity="false">
         <appender-ref ref="PERFORMANCE"/>
+        <appender-ref ref="DETAILED_FILE"/>
+        <appender-ref ref="RUN_LOG"/>
     </logger>
     
-    <logger name="org.cloudsimplus.ho.simulation.ExperimentRunner" level="INFO" additivity="false">
-        <appender-ref ref="EXPERIMENT"/>
-        <appender-ref ref="CONSOLE"/>
-    </logger>
-    
-    <!-- Root Logger -->
+    <!-- Root Logger - Redirect to file only -->
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="DETAILED_FILE"/>
+        <appender-ref ref="RUN_LOG"/>
         <appender-ref ref="ERROR_FILE"/>
     </root>
 </configuration>

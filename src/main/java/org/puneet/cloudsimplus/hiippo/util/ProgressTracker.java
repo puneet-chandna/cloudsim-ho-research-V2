@@ -2,358 +2,360 @@ package org.puneet.cloudsimplus.hiippo.util;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * ProgressTracker provides real-time tracking and reporting of experiment progress
- * across all phases of the Hippopotamus Optimization research framework.
- * 
- * <p>This class offers thread-safe progress monitoring with memory usage tracking,
- * estimated time remaining, and detailed phase reporting suitable for long-running
- * experiments on 16GB systems.</p>
+ * Tracks and displays progress information for the experimental suite.
+ * Provides clean console output with progress bars and status updates.
  * 
  * @author Puneet Chandna
  * @version 1.0.0
- * @since 2025-07-15
+ * @since 2025-01-26
  */
 public class ProgressTracker {
     private static final Logger logger = LoggerFactory.getLogger(ProgressTracker.class);
+    private static final Marker PROGRESS_MARKER = MarkerFactory.getMarker("PROGRESS");
     
-    private final Map<String, ProgressData> progressMap;
-    private final LocalDateTime startTime;
-    private final AtomicLong totalMemoryUsed;
-    private final AtomicInteger gcCount;
+    private final AtomicInteger totalTasks;
+    private final AtomicInteger completedTasks;
+    private final AtomicLong startTime;
+    private final AtomicLong lastUpdateTime;
     
-    /**
-     * Creates a new ProgressTracker instance with initial tracking state.
-     */
+    private String currentTask;
+    private String currentAlgorithm;
+    private String currentScenario;
+    private int currentReplication;
+    
     public ProgressTracker() {
-        this.progressMap = new ConcurrentHashMap<>();
-        this.startTime = LocalDateTime.now();
-        this.totalMemoryUsed = new AtomicLong(0);
-        this.gcCount = new AtomicInteger(0);
-        
-        logger.info("ProgressTracker initialized at {}", startTime);
+        this.totalTasks = new AtomicInteger(0);
+        this.completedTasks = new AtomicInteger(0);
+        this.startTime = new AtomicLong(0);
+        this.lastUpdateTime = new AtomicLong(0);
+        this.currentTask = "";
+        this.currentAlgorithm = "";
+        this.currentScenario = "";
+        this.currentReplication = 0;
     }
     
     /**
-     * Initializes a task with the specified name and total count.
+     * Initializes the progress tracker with total number of tasks.
      * 
-     * @param taskName the name of the task to initialize
-     * @param totalCount the total number of items to process
+     * @param taskName Name of the overall task
+     * @param totalTasks Total number of tasks to complete
      */
-    public void initializeTask(String taskName, int totalCount) {
-        if (taskName == null || taskName.trim().isEmpty()) {
-            throw new IllegalArgumentException("Task name cannot be null or empty");
-        }
+    public void initializeTask(String taskName, int totalTasks) {
+        this.currentTask = taskName;
+        this.totalTasks.set(totalTasks);
+        this.completedTasks.set(0);
+        this.startTime.set(System.currentTimeMillis());
+        this.lastUpdateTime.set(System.currentTimeMillis());
         
-        if (totalCount <= 0) {
-            throw new IllegalArgumentException("Total count must be positive");
-        }
-        
-        ProgressData data = progressMap.computeIfAbsent(taskName, k -> new ProgressData());
-        data.update(0, totalCount);
-        
-        logger.info("Task '{}' initialized with {} total items", taskName, totalCount);
+        printHeader();
+        printProgress();
     }
     
     /**
-     * Reports progress for a specific phase or task.
+     * Reports progress for a specific operation.
      * 
-     * @param phaseName the name of the phase being tracked
-     * @param current the current progress count
-     * @param total the total expected count
-     * @throws IllegalArgumentException if phaseName is null or empty
+     * @param operationName Name of the current operation
+     * @param completed Number of completed items
+     * @param total Total number of items
      */
-    public void reportProgress(String phaseName, int current, int total) {
-        if (phaseName == null || phaseName.trim().isEmpty()) {
-            throw new IllegalArgumentException("Phase name cannot be null or empty");
-        }
-        
-        if (total <= 0) {
-            throw new IllegalArgumentException("Total must be positive");
-        }
-        
-        if (current < 0 || current > total) {
-            throw new IllegalArgumentException("Current must be between 0 and total");
-        }
-        
-        ProgressData data = progressMap.computeIfAbsent(phaseName, k -> new ProgressData());
-        data.update(current, total);
-        
-        // Log progress every 10% or at completion
-        if (current == total || (current % Math.max(1, total / 10) == 0)) {
-            logProgress(phaseName, data);
-        }
-        
-        // Check memory usage periodically
-        if (current % 100 == 0) {
-            MemoryManager.checkMemoryUsage(phaseName);
-        }
+    public void reportProgress(String operationName, int completed, int total) {
+        this.completedTasks.set(completed);
+        updateProgress(operationName);
     }
     
     /**
-     * Reports progress with additional metadata.
+     * Updates the current algorithm being processed.
      * 
-     * @param phaseName the name of the phase
-     * @param current the current progress count
-     * @param total the total expected count
-     * @param metadata additional context information
+     * @param algorithm Algorithm name
      */
-    public void reportProgress(String phaseName, int current, int total, String metadata) {
-        reportProgress(phaseName, current, total);
-        
-        if (metadata != null && !metadata.trim().isEmpty()) {
-            logger.debug("Phase [{}] metadata: {}", phaseName, metadata);
-        }
+    public void setCurrentAlgorithm(String algorithm) {
+        this.currentAlgorithm = algorithm;
+        updateProgress("Algorithm: " + algorithm);
     }
     
     /**
-     * Gets the overall progress across all phases.
+     * Updates the current scenario being processed.
      * 
-     * @return overall progress as a percentage (0-100)
+     * @param scenario Scenario name
      */
-    public double getOverallProgress() {
-        if (progressMap.isEmpty()) {
-            return 0.0;
-        }
-        
-        double totalWeightedProgress = 0.0;
-        int totalWeight = 0;
-        
-        for (Map.Entry<String, ProgressData> entry : progressMap.entrySet()) {
-            ProgressData data = entry.getValue();
-            totalWeightedProgress += data.getProgress() * data.total;
-            totalWeight += data.total;
-        }
-        
-        return totalWeight > 0 ? (totalWeightedProgress / totalWeight) * 100 : 0.0;
+    public void setCurrentScenario(String scenario) {
+        this.currentScenario = scenario;
+        updateProgress("Scenario: " + scenario);
     }
     
     /**
-     * Gets estimated time remaining for a specific phase.
+     * Updates the current replication being processed.
      * 
-     * @param phaseName the name of the phase
-     * @return estimated duration remaining, or null if not enough data
+     * @param replication Replication number
      */
-    public Duration getEstimatedTimeRemaining(String phaseName) {
-        ProgressData data = progressMap.get(phaseName);
-        if (data == null || data.startTime == null || data.current == 0) {
-            return null;
-        }
-        
-        Duration elapsed = Duration.between(data.startTime, LocalDateTime.now());
-        double itemsPerSecond = (double) data.current / elapsed.getSeconds();
-        
-        if (itemsPerSecond <= 0) {
-            return null;
-        }
-        
-        long remainingItems = data.total - data.current;
-        long estimatedSeconds = (long) (remainingItems / itemsPerSecond);
-        
-        return Duration.ofSeconds(estimatedSeconds);
+    public void setCurrentReplication(int replication) {
+        this.currentReplication = replication;
+        updateProgress("Replication: " + replication);
     }
     
     /**
-     * Gets estimated time remaining for the entire experiment.
+     * Increments the completed task count.
+     */
+    public void incrementCompleted() {
+        int completed = this.completedTasks.incrementAndGet();
+        updateProgress("Task completed");
+        
+        if (completed >= totalTasks.get()) {
+            printCompletion();
+        }
+    }
+    
+    /**
+     * Prints the header information.
+     */
+    private void printHeader() {
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        logger.info(PROGRESS_MARKER, "=".repeat(80));
+        logger.info(PROGRESS_MARKER, "Hippopotamus Optimization Research Framework");
+        logger.info(PROGRESS_MARKER, "Run Started: {}", timestamp);
+        logger.info(PROGRESS_MARKER, "Total Tasks: {}", totalTasks.get());
+        logger.info(PROGRESS_MARKER, "=".repeat(80));
+    }
+    
+    /**
+     * Updates and prints the current progress.
      * 
-     * @return estimated duration remaining, or null if not enough data
+     * @param status Current status message
      */
-    public Duration getOverallEstimatedTimeRemaining() {
-        if (progressMap.isEmpty()) {
-            return null;
+    private void updateProgress(String status) {
+        long currentTime = System.currentTimeMillis();
+        long lastUpdate = lastUpdateTime.get();
+        
+        // Update progress every 2 seconds or when status changes
+        if (currentTime - lastUpdate > 2000 || !status.equals("Task completed")) {
+            lastUpdateTime.set(currentTime);
+            printProgress(status);
         }
-        
-        Duration totalElapsed = Duration.between(startTime, LocalDateTime.now());
-        double overallProgress = getOverallProgress() / 100.0;
-        
-        if (overallProgress <= 0) {
-            return null;
-        }
-        
-        long totalEstimatedSeconds = (long) (totalElapsed.getSeconds() / overallProgress);
-        long remainingSeconds = totalEstimatedSeconds - totalElapsed.getSeconds();
-        
-        return Duration.ofSeconds(Math.max(0, remainingSeconds));
     }
     
     /**
-     * Records memory usage statistics.
+     * Prints the current progress with status.
      * 
-     * @param memoryUsedBytes memory used in bytes
+     * @param status Current status message
      */
-    public void recordMemoryUsage(long memoryUsedBytes) {
-        totalMemoryUsed.addAndGet(memoryUsedBytes);
-    }
-    
-    /**
-     * Increments the garbage collection counter.
-     */
-    public void incrementGCCount() {
-        gcCount.incrementAndGet();
-    }
-    
-    /**
-     * Gets a summary report of all progress data.
-     * 
-     * @return formatted summary string
-     */
-    public String getSummaryReport() {
-        StringBuilder report = new StringBuilder();
-        report.append("\n=== Progress Summary ===\n");
-        report.append(String.format("Start Time: %s\n", startTime));
-        report.append(String.format("Current Time: %s\n", LocalDateTime.now()));
-        report.append(String.format("Overall Progress: %.2f%%\n", getOverallProgress()));
+    private void printProgress(String status) {
+        int completed = completedTasks.get();
+        int total = totalTasks.get();
+        double percentage = total > 0 ? (double) completed / total * 100 : 0;
         
-        Duration overallRemaining = getOverallEstimatedTimeRemaining();
-        if (overallRemaining != null) {
-            report.append(String.format("Estimated Time Remaining: %s\n", 
-                formatDuration(overallRemaining)));
+        long elapsed = System.currentTimeMillis() - startTime.get();
+        long estimatedTotal = 0;
+        long remaining = 0;
+        
+        // Calculate estimated total time only if we have completed tasks
+        if (total > 0 && completed > 0) {
+            estimatedTotal = (elapsed * total) / completed;
+            remaining = Math.max(0, estimatedTotal - elapsed);
         }
         
-        report.append(String.format("Total Memory Used: %.2f MB\n", 
-            totalMemoryUsed.get() / (1024.0 * 1024.0)));
-        report.append(String.format("GC Count: %d\n", gcCount.get()));
+        String progressBar = createProgressBar(percentage);
+        String timeInfo = formatTimeInfo(elapsed, remaining);
         
-        report.append("\nPhase Details:\n");
-        for (Map.Entry<String, ProgressData> entry : progressMap.entrySet()) {
-            ProgressData data = entry.getValue();
-            report.append(String.format("  %s: %d/%d (%.1f%%)", 
-                entry.getKey(), data.current, data.total, data.getProgress() * 100));
-            
-            Duration phaseRemaining = getEstimatedTimeRemaining(entry.getKey());
-            if (phaseRemaining != null) {
-                report.append(String.format(", ETA: %s", formatDuration(phaseRemaining)));
+        logger.info(PROGRESS_MARKER, "Progress: {}% [{}] {} - {}", 
+                   String.format("%.1f", percentage), progressBar, timeInfo, status);
+        
+        if (!currentAlgorithm.isEmpty() || !currentScenario.isEmpty()) {
+            String details = String.format("Current: %s | %s | Rep: %d", 
+                                         currentAlgorithm, currentScenario, currentReplication);
+            logger.info(PROGRESS_MARKER, "  {}", details);
+        }
+    }
+    
+    /**
+     * Prints the current progress without status.
+     */
+    private void printProgress() {
+        printProgress("Initializing...");
+    }
+    
+    /**
+     * Creates a visual progress bar.
+     * 
+     * @param percentage Completion percentage
+     * @return Progress bar string
+     */
+    private String createProgressBar(double percentage) {
+        int barLength = 30;
+        int filledLength = (int) (barLength * percentage / 100);
+        
+        StringBuilder bar = new StringBuilder();
+        for (int i = 0; i < barLength; i++) {
+            if (i < filledLength) {
+                bar.append("█");
+            } else {
+                bar.append("░");
             }
-            report.append("\n");
         }
-        
-        report.append("========================\n");
-        return report.toString();
+        return bar.toString();
     }
     
     /**
-     * Logs a detailed progress report to the logger.
-     */
-    public void logSummaryReport() {
-        logger.info(getSummaryReport());
-    }
-    
-    /**
-     * Resets progress for a specific phase.
+     * Formats time information for display.
      * 
-     * @param phaseName the name of the phase to reset
+     * @param elapsed Elapsed time in milliseconds
+     * @param remaining Remaining time in milliseconds
+     * @return Formatted time string
      */
-    public void resetPhase(String phaseName) {
-        if (phaseName != null) {
-            progressMap.remove(phaseName);
-            logger.info("Reset progress for phase: {}", phaseName);
-        }
+    private String formatTimeInfo(long elapsed, long remaining) {
+        String elapsedStr = formatDuration(elapsed);
+        String remainingStr = formatDuration(remaining);
+        return String.format("Elapsed: %s | Remaining: %s", elapsedStr, remainingStr);
     }
     
     /**
-     * Clears all progress data.
+     * Formats duration in milliseconds to human-readable format.
+     * 
+     * @param milliseconds Duration in milliseconds
+     * @return Formatted duration string
      */
-    public void resetAll() {
-        progressMap.clear();
-        totalMemoryUsed.set(0);
-        gcCount.set(0);
-        logger.info("All progress data reset");
-    }
-    
-    private void logProgress(String phaseName, ProgressData data) {
-        double progress = data.getProgress() * 100;
-        Duration remaining = getEstimatedTimeRemaining(phaseName);
-        
-        StringBuilder message = new StringBuilder();
-        message.append(String.format("Progress [%s]: %.1f%% (%d/%d)", 
-            phaseName, progress, data.current, data.total));
-        
-        if (remaining != null) {
-            message.append(String.format(", ETA: %s", formatDuration(remaining)));
-        }
-        
-        // Log at appropriate level based on progress
-        if (data.current == data.total) {
-            logger.info(message.toString());
-        } else if (progress >= 90) {
-            logger.info(message.toString());
-        } else if (progress >= 50) {
-            logger.info(message.toString());
-        } else {
-            logger.info(message.toString());
-        }
-    }
-    
-    private String formatDuration(Duration duration) {
-        long hours = duration.toHours();
-        long minutes = duration.toMinutesPart();
-        long seconds = duration.toSecondsPart();
+    private String formatDuration(long milliseconds) {
+        long seconds = milliseconds / 1000;
+        long minutes = seconds / 60;
+        long hours = minutes / 60;
         
         if (hours > 0) {
-            return String.format("%dh %dm %ds", hours, minutes, seconds);
+            return String.format("%dh %dm %ds", hours, minutes % 60, seconds % 60);
         } else if (minutes > 0) {
-            return String.format("%dm %ds", minutes, seconds);
+            return String.format("%dm %ds", minutes, seconds % 60);
         } else {
             return String.format("%ds", seconds);
         }
     }
     
     /**
-     * Inner class to store progress data for a single phase.
+     * Prints completion information.
      */
-    private static class ProgressData {
-        private final LocalDateTime startTime;
-        private volatile int current;
-        private volatile int total;
+    private void printCompletion() {
+        long totalTime = System.currentTimeMillis() - startTime.get();
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         
-        ProgressData() {
-            this.startTime = LocalDateTime.now();
-            this.current = 0;
-            this.total = 0;
-        }
-        
-        synchronized void update(int current, int total) {
-            this.current = current;
-            this.total = total;
-        }
-        
-        double getProgress() {
-            return total > 0 ? (double) current / total : 0.0;
-        }
+        logger.info(PROGRESS_MARKER, "=".repeat(80));
+        logger.info(PROGRESS_MARKER, "EXPERIMENT COMPLETED SUCCESSFULLY!");
+        logger.info(PROGRESS_MARKER, "Run Finished: {}", timestamp);
+        logger.info(PROGRESS_MARKER, "Total Time: {}", formatDuration(totalTime));
+        logger.info(PROGRESS_MARKER, "Tasks Completed: {}/{}", completedTasks.get(), totalTasks.get());
+        logger.info(PROGRESS_MARKER, "=".repeat(80));
     }
     
     /**
-     * Creates a progress bar string for console output.
+     * Prints an error message.
      * 
-     * @param phaseName the name of the phase
-     * @param width the width of the progress bar
-     * @return formatted progress bar string
+     * @param message Error message
      */
-    public String createProgressBar(String phaseName, int width) {
-        ProgressData data = progressMap.get(phaseName);
-        if (data == null) {
-            return String.format("[%s] No progress data", phaseName);
-        }
+    public void printError(String message) {
+        logger.error(PROGRESS_MARKER, "ERROR: {}", message);
+    }
+    
+    /**
+     * Prints a warning message.
+     * 
+     * @param message Warning message
+     */
+    public void printWarning(String message) {
+        logger.warn(PROGRESS_MARKER, "WARNING: {}", message);
+    }
+    
+    /**
+     * Prints an info message.
+     * 
+     * @param message Info message
+     */
+    public void printInfo(String message) {
+        logger.info(PROGRESS_MARKER, "INFO: {}", message);
+    }
+    
+    /**
+     * Gets a summary report of the progress.
+     * 
+     * @return Summary report string
+     */
+    public String getSummaryReport() {
+        int completed = completedTasks.get();
+        int total = totalTasks.get();
+        double percentage = total > 0 ? (double) completed / total * 100 : 0;
+        long totalTime = System.currentTimeMillis() - startTime.get();
         
-        double progress = data.getProgress();
-        int filled = (int) (width * progress);
+        return String.format("Progress Summary: %d/%d tasks completed (%.1f%%) in %s", 
+                           completed, total, percentage, formatDuration(totalTime));
+    }
+    
+    /**
+     * Logs the summary report.
+     */
+    public void logSummaryReport() {
+        logger.info(PROGRESS_MARKER, getSummaryReport());
+    }
+    
+    /**
+     * Resets the progress for a specific phase.
+     * 
+     * @param phaseName Name of the phase to reset
+     */
+    public void resetPhase(String phaseName) {
+        logger.info(PROGRESS_MARKER, "Resetting phase: {}", phaseName);
+        // Reset phase-specific counters if needed
+    }
+    
+    /**
+     * Resets all progress tracking.
+     */
+    public void resetAll() {
+        this.completedTasks.set(0);
+        this.startTime.set(System.currentTimeMillis());
+        this.lastUpdateTime.set(System.currentTimeMillis());
+        this.currentTask = "";
+        this.currentAlgorithm = "";
+        this.currentScenario = "";
+        this.currentReplication = 0;
+        logger.info(PROGRESS_MARKER, "All progress tracking reset");
+    }
+    
+    /**
+     * Gets the overall progress as a percentage.
+     * 
+     * @return Progress percentage (0.0 to 100.0)
+     */
+    public double getOverallProgress() {
+        int completed = completedTasks.get();
+        int total = totalTasks.get();
+        return total > 0 ? (double) completed / total * 100 : 0.0;
+    }
+    
+    /**
+     * Creates a progress bar for a specific phase.
+     * 
+     * @param phaseName Name of the phase
+     * @param barLength Length of the progress bar
+     * @return Progress bar string
+     */
+    public String createProgressBar(String phaseName, int barLength) {
+        double percentage = getOverallProgress();
+        int filledLength = (int) (barLength * percentage / 100);
         
         StringBuilder bar = new StringBuilder();
-        bar.append('[');
-        for (int i = 0; i < width; i++) {
-            bar.append(i < filled ? '=' : ' ');
+        bar.append(phaseName).append(": [");
+        for (int i = 0; i < barLength; i++) {
+            if (i < filledLength) {
+                bar.append("█");
+            } else {
+                bar.append("░");
+            }
         }
-        bar.append(']');
-        
-        return String.format("%s %s %.1f%% (%d/%d)", 
-            phaseName, bar.toString(), progress * 100, data.current, data.total);
+        bar.append("] ").append(String.format("%.1f%%", percentage));
+        return bar.toString();
     }
 }

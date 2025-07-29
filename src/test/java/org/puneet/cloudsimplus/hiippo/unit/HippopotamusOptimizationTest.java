@@ -37,7 +37,11 @@ class HippopotamusOptimizationTest {
 
         hostList = new ArrayList<>();
         for (int i = 0; i < 2; i++) {
-            hostList.add(new HostSimple(10000, 8192, 100000, new ArrayList<>()));
+            // Create hosts with proper PE list instead of empty ArrayList
+            List<org.cloudsimplus.resources.Pe> peList = new ArrayList<>();
+            peList.add(new org.cloudsimplus.resources.PeSimple(1000));
+            peList.add(new org.cloudsimplus.resources.PeSimple(1000));
+            hostList.add(new HostSimple(10000, 8192, 100000, peList));
         }
     }
 

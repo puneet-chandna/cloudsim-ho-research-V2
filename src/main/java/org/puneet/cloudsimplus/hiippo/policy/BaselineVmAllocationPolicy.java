@@ -95,6 +95,23 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
     public abstract String getName();
     
     /**
+     * Sets the host list for this allocation policy
+     * 
+     * @param hosts The list of hosts to set
+     */
+    public void setHostList(List<Host> hosts) {
+        try {
+            // Use reflection to access the protected hostList field from VmAllocationPolicyAbstract
+            java.lang.reflect.Field hostListField = VmAllocationPolicyAbstract.class.getDeclaredField("hostList");
+            hostListField.setAccessible(true);
+            hostListField.set(this, hosts);
+            logger.debug("Successfully set {} hosts in {} allocation policy", hosts.size(), getName());
+        } catch (Exception e) {
+            logger.error("Failed to set host list in {} allocation policy", getName(), e);
+        }
+    }
+    
+    /**
      * Allocates a host for the given VM with comprehensive error handling
      * 
      * @param vm The VM to allocate
@@ -412,8 +429,9 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
                 return false;
             }
             
-            // Perform allocation
-            boolean allocated = Boolean.TRUE.equals(allocateHostForVm(vm, host));
+            // Perform allocation using CloudSim Plus method
+            HostSuitability suitability = host.createVm(vm);
+            boolean allocated = suitability.fully();
             
             if (allocated) {
                 // Update tracking maps
@@ -424,6 +442,10 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
                 if (detailedLogging) {
                     logHostUtilization(host);
                 }
+                
+                logger.debug("Successfully allocated VM {} to host {}", vm.getId(), host.getId());
+            } else {
+                logger.warn("Failed to allocate VM {} to host {}", vm.getId(), host.getId());
             }
             
             return allocated;

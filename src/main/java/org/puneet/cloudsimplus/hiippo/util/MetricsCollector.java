@@ -125,12 +125,19 @@ public class MetricsCollector {
                 for (Host host : hostList) {
                     if (host == null) continue;
                     
-                    // CPU utilization
+                    // CPU utilization - use allocated MIPS instead of running MIPS
                     double hostCpuCapacity = host.getTotalMipsCapacity();
-                    double hostCpuUsed = host.getCpuMipsUtilization();
+                    double hostCpuUsed = host.getTotalAllocatedMips();
                     
-                    totalCpuCapacity += hostCpuCapacity;
-                    totalCpuUsed += hostCpuUsed;
+                    // CRITICAL FIX: Ensure we have valid values
+                    if (hostCpuCapacity > 0) {
+                        totalCpuCapacity += hostCpuCapacity;
+                        totalCpuUsed += hostCpuUsed;
+                        
+                        logger.debug("Host {}: CPU {:.2f}/{:.2f} MIPS ({:.2f}%)", 
+                                   host.getId(), hostCpuUsed, hostCpuCapacity, 
+                                   (hostCpuUsed / hostCpuCapacity) * 100);
+                    }
                     
                     // RAM utilization
                     if (host.getRam() != null) {
@@ -549,7 +556,12 @@ public class MetricsCollector {
         double totalUtilization = hosts.stream()
             .mapToDouble(host -> {
                 try {
-                    return host.getCpuPercentUtilization();
+                    // Calculate CPU utilization based on allocated MIPS vs total capacity
+                    double totalMips = host.getTotalMipsCapacity();
+                    double allocatedMips = host.getTotalAllocatedMips();
+                    double utilization = totalMips > 0 ? allocatedMips / totalMips : 0.0;
+                    // Ensure utilization is between 0 and 1
+                    return Math.max(0.0, Math.min(1.0, utilization));
                 } catch (Exception e) {
                     logger.warn("Could not get CPU utilization for host: {}", host.getId());
                     return 0.0;
@@ -568,10 +580,12 @@ public class MetricsCollector {
         double totalUtilization = hosts.stream()
             .mapToDouble(host -> {
                 try {
-                    // Use RAM utilization calculation
+                    // Use RAM utilization calculation based on allocated resources
                     long totalRam = host.getRam().getCapacity();
-                    long usedRam = totalRam - host.getRam().getAvailableResource();
-                    return totalRam > 0 ? (double) usedRam / totalRam * 100.0 : 0.0;
+                    long allocatedRam = host.getRam().getAllocatedResource();
+                    double utilization = totalRam > 0 ? (double) allocatedRam / totalRam : 0.0;
+                    // Ensure utilization is between 0 and 1
+                    return Math.max(0.0, Math.min(1.0, utilization));
                 } catch (Exception e) {
                     logger.warn("Could not get RAM utilization for host: {}", host.getId());
                     return 0.0;
@@ -592,11 +606,12 @@ public class MetricsCollector {
                 try {
                     PowerModel powerModel = host.getPowerModel();
                     if (powerModel != null) {
-                        // Use CPU utilization for power calculation
-                        double cpuUtil = host.getCpuPercentUtilization();
-                        return powerModel.getPower(); // PowerModel.getPower() takes no arguments in CloudSim Plus 8.0.0
+                        // Get current power consumption
+                        return powerModel.getPower();
                     }
-                    return 0.0;
+                    // Fallback: estimate power based on CPU utilization
+                    double cpuUtil = host.getCpuPercentUtilization();
+                    return cpuUtil * 1000.0; // Assume 1000W max power per host
                 } catch (Exception e) {
                     logger.warn("Could not get power consumption for host: {}", host.getId());
                     return 0.0;

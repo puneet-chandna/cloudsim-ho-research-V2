@@ -3,16 +3,20 @@ package org.puneet.cloudsimplus.hiippo.baseline;
 import org.cloudsimplus.hosts.Host;
 import org.cloudsimplus.hosts.HostSuitability;
 import org.cloudsimplus.vms.Vm;
+import org.cloudsimplus.allocationpolicies.VmAllocationPolicyAbstract;
 import org.puneet.cloudsimplus.hiippo.policy.BaselineVmAllocationPolicy;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.util.ValidationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import org.cloudsimplus.datacenters.Datacenter;
 
 /**
  * Best Fit VM Allocation Policy Implementation for CloudSim Plus.
@@ -175,73 +179,80 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
      */
     @Override
     public HostSuitability allocateHostForVm(Vm vm) {
-        logger.debug("Starting BestFit allocation for VM {} (MIPS: {}, RAM: {} MB, BW: {} Mbps, Storage: {} GB)",
-            vm.getId(), vm.getTotalMipsCapacity(), vm.getRam().getCapacity(),
-            vm.getBw().getCapacity(), vm.getStorage().getCapacity());
-        
-        // Validate input
         if (vm == null) {
-            logger.error("Cannot allocate null VM");
-            throw new IllegalArgumentException("VM cannot be null");
+            logger.error("BestFit: VM cannot be null");
+            return HostSuitability.NULL;
         }
         
         totalAllocations++;
-        long startTime = System.currentTimeMillis();
+        long startTime = System.nanoTime();
+        
+        logger.info("BestFit: Starting allocation for VM {} (MIPS: {}, RAM: {} MB, BW: {} Mbps, Storage: {} GB)", 
+            vm.getId(), vm.getTotalMipsCapacity(), vm.getRam().getCapacity(),
+            vm.getBw().getCapacity(), vm.getStorage().getCapacity());
         
         try {
-            // Check if VM is already allocated
-            if (vm.getHost() != Host.NULL) {
-                logger.warn("VM {} is already allocated to Host {}", vm.getId(), vm.getHost().getId());
+            // Validate VM requirements
+            if (!validateVmRequirements(vm)) {
+                logger.warn("BestFit: VM {} requirements validation failed", vm.getId());
+                failedAllocations++;
                 return HostSuitability.NULL;
             }
             
-            // Find suitable hosts
-            List<Host> suitableHosts = getHostList().stream().filter(h -> isHostSuitableForVm(h, vm)).collect(Collectors.toList());
+            // CRITICAL FIX: Use parent class findSuitableHosts method
+            List<Host> suitableHosts = findSuitableHosts(vm);
+            
+            logger.info("BestFit: Found {} suitable hosts for VM {}", suitableHosts.size(), vm.getId());
+            
             if (suitableHosts.isEmpty()) {
-                logger.warn("No suitable host found for VM {} - all hosts either full or unsuitable", vm.getId());
+                logger.warn("BestFit: No suitable hosts found for VM {}", vm.getId());
+                failedAllocations++;
                 return HostSuitability.NULL;
             }
             
-            // Select best host
+            // Select the best host (minimum waste)
             Host bestHost = selectHost(vm, suitableHosts);
             if (bestHost == null) {
-                logger.warn("No suitable host found for VM {} after selectHost", vm.getId());
+                logger.warn("BestFit: No best host selected for VM {}", vm.getId());
+                failedAllocations++;
                 return HostSuitability.NULL;
             }
             
-            // Calculate waste before allocation for statistics
-            ResourceWastage wastage = calculateDetailedResourceWastage(bestHost, vm);
+            logger.info("BestFit: Selected host {} for VM {} (waste: {})", 
+                bestHost.getId(), vm.getId(), calculateResourceWastage(bestHost, vm));
             
-            // Attempt allocation using performAllocation
-            boolean allocated = performAllocation(vm, bestHost);
+            // CRITICAL FIX: Use parent class performAllocation method
+            boolean allocationSuccess = performAllocation(vm, bestHost);
             
-            if (allocated) {
-                successfulAllocations++;
-                long allocationTime = System.currentTimeMillis() - startTime;
-                totalAllocationTime.addAndGet(allocationTime);
-                
-                logger.info("Successfully allocated VM {} to Host {} (total waste: {:.4f}, time: {} ms)",
-                    vm.getId(), bestHost.getId(), wastage.total, allocationTime);
-                
-                // Update resource-specific statistics
-                updateResourceStatistics(wastage);
-                
-                // Log resource utilization after allocation
-                logResourceUtilization(bestHost, vm);
-                
-                // Clear cache entries for this host
-                if (cachingEnabled) {
-                    clearCacheForHost(bestHost);
-                }
-                return HostSuitability.NULL;
-            } else {
-                logger.error("Failed to allocate VM {} to selected Host {} despite suitability check",
-                    vm.getId(), bestHost.getId());
+            logger.info("BestFit: Allocation result for VM {} on host {}: {}", 
+                vm.getId(), bestHost.getId(), allocationSuccess);
+            
+            if (!allocationSuccess) {
+                logger.warn("BestFit: Failed to allocate VM {} to host {}", vm.getId(), bestHost.getId());
+                failedAllocations++;
                 return HostSuitability.NULL;
             }
+            
+            // Update statistics
+            successfulAllocations++;
+            long allocationTime = System.nanoTime() - startTime;
+            totalAllocationTime.addAndGet(allocationTime);
+            
+            // Log successful allocation
+            logger.info("BestFit: Successfully allocated VM {} to host {} in {} ns", 
+                vm.getId(), bestHost.getId(), allocationTime);
+            
+            // Log resource utilization
+            logResourceUtilization(bestHost, vm);
+            
+            // Clear cache for this host
+            clearCacheForHost(bestHost);
+            
+            return HostSuitability.NULL;
             
         } catch (Exception e) {
-            logger.error("Unexpected error during BestFit allocation for VM {}", vm.getId(), e);
+            logger.error("BestFit: Error allocating VM {}: {}", vm.getId(), e.getMessage(), e);
+            failedAllocations++;
             return HostSuitability.NULL;
         }
     }
@@ -279,32 +290,56 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
      */
     private boolean isHostSuitableForVm(Host host, Vm vm) {
         if (host == null || vm == null) {
+            logger.info("Host or VM is null for suitability check");
             return false;
         }
         
-        // Basic suitability check
-        if (!host.isSuitableForVm(vm)) {
+        // Check if host is active and not failed
+        if (!host.isActive() || host.isFailed()) {
+            logger.info("Host {} is not active or failed for VM {}", host.getId(), vm.getId());
             return false;
         }
         
-        // Additional checks for near-capacity situations
-        double availableMips = host.getMips() - host.getTotalAllocatedMips();
-        double availableRam = host.getRam().getAvailableResource();
-        double availableBw = host.getBw().getAvailableResource();
-        double availableStorage = host.getStorage().getAvailableResource();
-        
-        // Ensure host has minimum capacity threshold
-        boolean mipsOk = availableMips >= vm.getTotalMipsCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
-        boolean ramOk = availableRam >= vm.getRam().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
-        boolean bwOk = availableBw >= vm.getBw().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
-        boolean storageOk = availableStorage >= vm.getStorage().getCapacity() * (1 + MIN_CAPACITY_THRESHOLD);
-        
-        if (!mipsOk || !ramOk || !bwOk || !storageOk) {
-            logger.trace("Host {} rejected due to insufficient capacity margin", host.getId());
-            return false;
+        // Simple resource availability check - use CloudSim Plus built-in method
+        try {
+            // Use CloudSim Plus's built-in suitability check
+            boolean suitable = Boolean.TRUE.equals(host.isSuitableForVm(vm));
+            if (!suitable) {
+                logger.info("Host {} rejected for VM {} by CloudSim Plus suitability check", host.getId(), vm.getId());
+            }
+            return suitable;
+        } catch (Exception e) {
+            logger.warn("Error checking host suitability for VM {} on host {}: {}", vm.getId(), host.getId(), e.getMessage());
+            
+            // Fallback: manual resource check
+            try {
+                // Check if host has enough CPU capacity
+                double hostAvailableMips = host.getTotalMipsCapacity();
+                double vmMips = vm.getTotalMipsCapacity();
+                
+                // Check if host has enough RAM
+                long hostAvailableRam = host.getRam().getAvailableResource();
+                long vmRam = vm.getRam().getCapacity();
+                
+                // Check if host has enough bandwidth
+                long hostAvailableBw = host.getBw().getAvailableResource();
+                long vmBw = vm.getBw().getCapacity();
+                
+                // Check if host has enough storage
+                long hostAvailableStorage = host.getStorage().getAvailableResource();
+                long vmStorage = vm.getStorage().getCapacity();
+                
+                // All resources must be available
+                return hostAvailableMips >= vmMips && 
+                       hostAvailableRam >= vmRam && 
+                       hostAvailableBw >= vmBw && 
+                       hostAvailableStorage >= vmStorage;
+                
+            } catch (Exception e2) {
+                logger.error("Fallback resource check also failed for VM {} on host {}: {}", vm.getId(), host.getId(), e2.getMessage());
+                return false;
+            }
         }
-        
-        return true;
     }
     
     /**
@@ -576,7 +611,7 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
     @Override
     public java.util.Optional<Host> defaultFindHostForVm(Vm vm) {
         List<Host> suitableHosts = getHostList().stream()
-            .filter(h -> isHostSuitableForVm(h, vm))
+            .filter(h -> h != null && isHostSuitableForVm(h, vm))
             .toList();
         Host bestHost = selectHost(vm, suitableHosts);
         return java.util.Optional.ofNullable(bestHost);
@@ -584,26 +619,50 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
 
     // 3. Fix getAllocatedMips() usage for total allocated MIPS
     private double getTotalAllocatedMips(Host host) {
-        // Sums allocated MIPS for all VMs on the host
+        // Simple approach: sum the MIPS of all VMs currently allocated to this host
         return host.getVmList().stream()
-            .mapToDouble(vm -> {
-                Object mips = host.getVmScheduler().getAllocatedMips(vm);
-                if (mips instanceof Number) {
-                    return ((Number) mips).doubleValue();
-                } else if (mips instanceof Iterable) {
-                    double sum = 0.0;
-                    for (Object o : (Iterable<?>) mips) {
-                        if (o instanceof Number) sum += ((Number) o).doubleValue();
-                    }
-                    return sum;
-                } else {
-                    try {
-                        return Double.parseDouble(mips.toString());
-                    } catch (Exception e) {
-                        return 0.0;
-                    }
-                }
-            })
+            .mapToDouble(Vm::getTotalMipsCapacity)
             .sum();
+    }
+
+    /**
+     * CRITICAL FIX: Get available hosts directly from datacenter
+     */
+    private List<Host> getAvailableHosts() {
+        try {
+            // Try to get hosts from datacenter first
+            if (getDatacenter() != null) {
+                return getDatacenter().getHostList();
+            }
+            
+            // Fallback to getHostList() method
+            List<Host> hosts = getHostList();
+            if (hosts != null && !hosts.isEmpty()) {
+                return hosts;
+            }
+            
+            // Last resort: try to get hosts from any available source
+            logger.warn("BestFit: No hosts available from datacenter or host list");
+            return new ArrayList<>();
+            
+        } catch (Exception e) {
+            logger.error("BestFit: Error getting available hosts", e);
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * CRITICAL FIX: Manually set host list for BestFit allocation
+     */
+    public void setHostList(List<Host> hosts) {
+        try {
+            // Use reflection to access the protected hostList field
+            Field hostListField = VmAllocationPolicyAbstract.class.getDeclaredField("hostList");
+            hostListField.setAccessible(true);
+            hostListField.set(this, hosts);
+            logger.debug("BestFit: Successfully set {} hosts in allocation policy", hosts.size());
+        } catch (Exception e) {
+            logger.error("BestFit: Failed to set host list", e);
+        }
     }
 }

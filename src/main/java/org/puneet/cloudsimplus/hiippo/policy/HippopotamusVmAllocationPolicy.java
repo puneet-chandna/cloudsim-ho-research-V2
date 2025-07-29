@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.Arrays;
 
 /**
  * VM Allocation Policy implementation using Hippopotamus Optimization (HO) algorithm.
@@ -69,6 +70,7 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     
     private int convergenceIterations = 1;
     private double optimizationTime = 0.0;
+    private double bestFitness = 0.0; // Add best fitness tracking
     
     /**
      * Creates a new HippopotamusVmAllocationPolicy with default parameters.
@@ -134,14 +136,14 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 return HostSuitability.NULL;
             }
             
-            // If batch optimization is enabled and we're not in the middle of optimization
-            if (batchOptimizationEnabled && !optimizationInProgress) {
-                boolean result = handleBatchAllocation(vm);
-                return result ? HostSuitability.NULL : HostSuitability.NULL;
+            // Always use HO algorithm for allocation
+            boolean result = performDirectAllocation(vm);
+            if (result) {
+                logger.info("Successfully allocated VM {} using HO algorithm", vm.getId());
+                return HostSuitability.NULL; // CloudSim Plus will handle the allocation
             } else {
-                // Direct allocation using HO algorithm
-                boolean result = performDirectAllocation(vm);
-                return result ? HostSuitability.NULL : HostSuitability.NULL;
+                logger.warn("Failed to allocate VM {} using HO algorithm", vm.getId());
+                return HostSuitability.NULL;
             }
             
         } catch (Exception e) {
@@ -291,12 +293,24 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @return The best solution found, or null if optimization failed
      */
     private Solution runOptimizationWithTimeout(List<Vm> vms, List<Host> hosts, long timeoutMs) {
+        long startTime = System.currentTimeMillis();
+        
         try {
             // Create optimization context
             OptimizationContext context = new OptimizationContext(vms, hosts, vmHostMap);
             
             // Run HO algorithm (use standard optimize method)
             Solution solution = hoAlgorithm.optimize(vms, hosts);
+            
+            // Update convergence tracking
+            convergenceIterations = hoAlgorithm.getConvergenceAnalyzer().getConvergenceRate();
+            optimizationTime = (System.currentTimeMillis() - startTime) / 1000.0;
+            
+            // Update best fitness from the solution
+            if (solution != null) {
+                bestFitness = solution.getFitness();
+                logger.info("Optimization completed with best fitness: {}", bestFitness);
+            }
             
             // Validate solution
             if (solution != null && validator.validateAllocation(hosts).isValid()) {
@@ -362,12 +376,12 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @return true if allocation was successful
      */
     private boolean performDirectAllocation(Vm vm) {
-        logger.debug("Performing direct allocation for VM {}", vm.getId());
+        logger.debug("Performing direct allocation for VM {} using HO algorithm", vm.getId());
         
         // Get available hosts
         List<Host> availableHosts = getHostList().stream()
             .filter(host -> host.isActive() && !host.isFailed())
-            .filter(host -> Boolean.TRUE.equals(host.isSuitableForVm(vm)) && validator.validateVmPlacement(vm, host).isValid())
+            .filter(host -> Boolean.TRUE.equals(host.isSuitableForVm(vm)))
             .collect(Collectors.toList());
         
         if (availableHosts.isEmpty()) {
@@ -375,11 +389,48 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             return false;
         }
         
-        // For single VM, use simplified optimization
-        Host bestHost = findBestHostForVm(vm, availableHosts);
-        
-        if (bestHost != null) {
-            return performAllocation(vm, bestHost);
+        try {
+            // Use HO algorithm to find optimal placement
+            List<Vm> singleVm = Arrays.asList(vm);
+            Solution solution = hoAlgorithm.optimize(singleVm, availableHosts);
+            
+            // Update best fitness from the solution
+            if (solution != null) {
+                bestFitness = solution.getFitness();
+                logger.debug("Direct allocation fitness: {}", bestFitness);
+            }
+            
+            if (solution != null && solution.getAllocatedVmCount() > 0) {
+                Host assignedHost = solution.getHostForVm(vm);
+                if (assignedHost != null) {
+                    boolean result = performAllocation(vm, assignedHost);
+                    if (result) {
+                        logger.info("HO algorithm successfully allocated VM {} to host {}", 
+                            vm.getId(), assignedHost.getId());
+                        return true;
+                    }
+                }
+            }
+            
+            // Fallback to simple heuristic if HO fails
+            logger.warn("HO algorithm failed, falling back to simple heuristic for VM {}", vm.getId());
+            Host bestHost = findBestHostForVm(vm, availableHosts);
+            
+            if (bestHost != null) {
+                boolean result = performAllocation(vm, bestHost);
+                if (result) {
+                    logger.info("Fallback allocation successful: VM {} to host {}", vm.getId(), bestHost.getId());
+                }
+                return result;
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error in HO algorithm for VM {}: {}", vm.getId(), e.getMessage(), e);
+            // Fallback to simple heuristic
+            Host bestHost = findBestHostForVm(vm, availableHosts);
+            if (bestHost != null) {
+                return performAllocation(vm, bestHost);
+            }
         }
         
         logger.warn("Could not find suitable host for VM {}", vm.getId());
@@ -489,8 +540,9 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 return false;
             }
             
-            // Perform allocation
-            boolean allocated = Boolean.TRUE.equals(allocateHostForVm(vm, host));
+            // Perform allocation using CloudSim Plus method
+            HostSuitability suitability = host.createVm(vm);
+            boolean allocated = suitability.fully();
             
             if (allocated) {
                 // Update tracking maps
@@ -783,6 +835,6 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     
     public double getBestFitness() {
         // Return the best fitness from the HO algorithm
-        return 0.0; // TODO: Implement when HippopotamusOptimization has getBestFitness method
+        return bestFitness;
     }
 }

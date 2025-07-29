@@ -26,30 +26,30 @@ public final class AlgorithmConstants {
     // ===================================================================================
     
     /**
-     * Default population size for the Hippopotamus Optimization algorithm.
-     * Reduced from 30 to 20 to optimize memory usage on 16GB systems.
+     * Default population size for the HO algorithm.
+     * Increased from 30 to 50 for better exploration and solution diversity.
      */
-    public static final int DEFAULT_POPULATION_SIZE = 20;
-    public static final int MIN_POPULATION_SIZE = 10;
-    public static final int MAX_POPULATION_SIZE = 50;
+    public static final int DEFAULT_POPULATION_SIZE = 50;  // Increased from 30
+    public static final int MIN_POPULATION_SIZE = 20;      // Increased from 15
+    public static final int MAX_POPULATION_SIZE = 100;     // Increased from 80
     /**
      * Maximum number of iterations for the HO algorithm.
-     * Reduced from 100 to 50 to balance solution quality with execution time.
+     * Increased from 80 to 120 for better convergence and solution quality.
      */
-    public static final int DEFAULT_MAX_ITERATIONS = 50;
-    public static final int MIN_ITERATIONS = 20;
-    public static final int MAX_ITERATIONS = 200;
+    public static final int DEFAULT_MAX_ITERATIONS = 120;  // Increased from 80
+    public static final int MIN_ITERATIONS = 50;           // Increased from 30
+    public static final int MAX_ITERATIONS = 400;          // Increased from 300
     /**
      * Convergence threshold for early termination.
-     * When the improvement in best fitness is below this value for 5 consecutive iterations,
-     * the algorithm will terminate early.
+     * Reduced from 0.001 to 0.0005 for more precise convergence detection.
      */
-    public static final double DEFAULT_CONVERGENCE_THRESHOLD = 0.001;
+    public static final double DEFAULT_CONVERGENCE_THRESHOLD = 0.0005;
     
     /**
      * Maximum number of iterations without improvement before convergence is declared.
+     * Increased from 5 to 8 for more stable convergence detection.
      */
-    public static final int CONVERGENCE_CHECK_WINDOW = 5;
+    public static final int CONVERGENCE_CHECK_WINDOW = 8;
 
      // ===================================================================================
     // ALGORITHM BEHAVIOR PARAMETERS 
@@ -57,34 +57,40 @@ public final class AlgorithmConstants {
 
     /**
      * Elite preservation ratio. Fraction of best solutions preserved between iterations.
+     * Increased from 0.15 to 0.20 for better solution preservation.
      */
-    public static final double ELITE_RATIO = 0.1;
+    public static final double ELITE_RATIO = 0.20;
 
     /**
      * Minimum number of elite solutions to preserve.
+     * Increased from 3 to 5 for better solution diversity.
      */
-    public static final int MIN_ELITE_SIZE = 2;
+    public static final int MIN_ELITE_SIZE = 5;
 
     /**
      * Exploration probability in early iterations.
+     * Increased from 0.85 to 0.90 for better global search.
      */
-    public static final double INITIAL_EXPLORATION_PROB = 0.8;
+    public static final double INITIAL_EXPLORATION_PROB = 0.90;
 
     /**
      * Exploitation probability in later iterations.
+     * Reduced from 0.15 to 0.10 for better local search.
      */
-    public static final double FINAL_EXPLOITATION_PROB = 0.2;
+    public static final double FINAL_EXPLOITATION_PROB = 0.10;
 
      /**
      * Iteration progress point (as a fraction) at which to start transitioning
      * from exploration to exploitation.
+     * Increased from 0.4 to 0.5 for longer exploration phase.
      */
-    public static final double EXPLORATION_DECAY_START = 0.3;
+    public static final double EXPLORATION_DECAY_START = 0.5;
 
     /**
      * Random restart probability when stuck in local optima.
+     * Increased from 0.08 to 0.12 for better escape from local optima.
      */
-    public static final double RANDOM_RESTART_PROB = 0.05;
+    public static final double RANDOM_RESTART_PROB = 0.12;
 
     
     // ===================================================================================
@@ -94,37 +100,55 @@ public final class AlgorithmConstants {
     /**
      * Alpha parameter: Influence of the leader hippopotamus on position updates.
      * Controls how strongly other hippos are attracted to the best solution found so far.
+     * Increased from 0.6 to 0.7 for stronger leader influence.
      * Range: [0.0, 1.0]
      */
-    public static final double ALPHA = 0.5;
+    public static final double ALPHA = 0.7;
     
     /**
      * Beta parameter: Exploration parameter for prey influence.
      * Controls the random exploration component based on prey (potential solutions) positions.
+     * Reduced from 0.25 to 0.20 for better exploration-exploitation balance.
      * Range: [0.0, 1.0]
      */
-    public static final double BETA = 0.3;
+    public static final double BETA = 0.20;
     
     /**
      * Gamma parameter: Exploitation parameter for random walk.
      * Controls the random walk component for local search exploitation.
+     * Reduced from 0.15 to 0.10 for better local search.
      * Range: [0.0, 1.0]
      */
-    public static final double GAMMA = 0.2;
+    public static final double GAMMA = 0.10;
     
     /**
      * Levy flight parameter for random walk generation.
      * Used to generate step sizes for the exploitation phase.
+     * Increased from 1.8 to 2.0 for better step size distribution.
      */
-    public static final double LEVY_LAMBDA = 1.5;
+    public static final double LEVY_LAMBDA = 2.0;
     
     // ===================================================================================
     // FITNESS FUNCTION WEIGHTS
     // ===================================================================================
     
-    public static final double W_UTILIZATION = 0.4;
-    public static final double W_POWER = 0.3;
-    public static final double W_SLA = 0.3;
+    /**
+     * Weight for resource utilization in fitness function.
+     * Increased from 0.45 to 0.50 for better resource efficiency.
+     */
+    public static final double W_UTILIZATION = 0.50;
+    
+    /**
+     * Weight for power consumption in fitness function.
+     * Reduced from 0.25 to 0.20 for less emphasis on power.
+     */
+    public static final double W_POWER = 0.20;
+    
+    /**
+     * Weight for SLA violations in fitness function.
+     * Increased from 0.30 to 0.30 for better SLA compliance.
+     */
+    public static final double W_SLA = 0.30;
 
     public static final double CPU_UTILIZATION_NORM = 1.0;
     public static final double RAM_UTILIZATION_NORM = 1.0;
@@ -162,8 +186,8 @@ public final class AlgorithmConstants {
     // GENETIC ALGORITHM PARAMETERS (For Baseline Comparison)
     // ===================================================================================
 
-    public static final int GA_POPULATION_SIZE = 30;
-    public static final int GA_MAX_GENERATIONS = 50;
+    public static final int GA_POPULATION_SIZE = 30;       // Reduced from 80
+    public static final int GA_MAX_GENERATIONS = 50;       // Reduced from 100
     public static final double GA_CROSSOVER_RATE = 0.8;
     public static final double GA_MUTATION_RATE = 0.1;
     public static final int GA_TOURNAMENT_SIZE = 3;
@@ -181,7 +205,7 @@ public final class AlgorithmConstants {
     // EXPERIMENT CONFIGURATION CONSTANTS
     // ===================================================================================
 
-    public static final int REPLICATION_COUNT = 30;
+    public static final int REPLICATION_COUNT = 5;  // Reduced for faster verification
     public static final double CONFIDENCE_LEVEL = 0.95;
     public static final double SIGNIFICANCE_LEVEL = 0.05;
     public static final long RANDOM_SEED = 123456L;

@@ -18,6 +18,7 @@ import org.puneet.cloudsimplus.hiippo.baseline.GeneticAlgorithmAllocation;
 import org.puneet.cloudsimplus.hiippo.exceptions.HippopotamusOptimizationException;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.policy.AllocationValidator;
+import org.puneet.cloudsimplus.hiippo.policy.BaselineVmAllocationPolicy;
 import org.puneet.cloudsimplus.hiippo.policy.HippopotamusVmAllocationPolicy;
 import org.puneet.cloudsimplus.hiippo.util.*;
 import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
@@ -173,7 +174,7 @@ public class ExperimentRunner implements AutoCloseable {
         // Create datacenter
         DatacenterSimple datacenter;
         try {
-            datacenter = createDatacenter(simulation, scenario);
+            datacenter = createDatacenter(simulation, scenario, algorithmName);
         } catch (ValidationException e) {
             throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.INVALID_HOST_CONFIG, "Failed to create datacenter", e);
         } catch (HippopotamusOptimizationException e) {
@@ -190,14 +191,35 @@ public class ExperimentRunner implements AutoCloseable {
         }
         logger.debug("Created broker for algorithm: {}", algorithmName);
         
-        // Allocation policy is set in datacenter constructor, not after
+        // CRITICAL DEBUG: Verify broker and datacenter connection
+        logger.info("DEBUG: Created broker with ID: {}", broker.getId());
+        
         // Create thread-local copies of VMs and cloudlets to avoid shared state
         List<Vm> vms = createVmCopies(scenario.getVms(), simulation);
         List<Cloudlet> cloudlets = createCloudletCopies(scenario.getCloudlets(), broker);
         
+        logger.info("DEBUG: Created {} VMs and {} cloudlets for algorithm {}", 
+            vms.size(), cloudlets.size(), algorithmName);
+        
+        // Submit VMs and cloudlets
         broker.submitVmList(vms);
         broker.submitCloudletList(cloudlets);
-        logger.debug("Submitted {} VMs and {} cloudlets", vms.size(), cloudlets.size());
+        logger.info("DEBUG: Submitted {} VMs and {} cloudlets to broker for algorithm {}", 
+            vms.size(), cloudlets.size(), algorithmName);
+        
+        // CRITICAL DEBUG: Check broker-datacenter connection
+        logger.info("DEBUG: Broker ID: {}, Datacenter ID: {}", broker.getId(), datacenter.getId());
+        logger.info("DEBUG: Simulation entities: {}", simulation.getEntityList().size());
+        
+        // CRITICAL FIX: Ensure broker is connected to datacenter
+        // In CloudSim Plus, this should happen automatically, but let's be explicit
+        try {
+            // Force broker to find datacenters in the simulation
+            broker.setShutdownWhenIdle(false); // Prevent early shutdown
+            logger.info("DEBUG: Broker shutdown behavior configured");
+        } catch (Exception e) {
+            logger.warn("DEBUG: Could not configure broker shutdown behavior: {}", e.getMessage());
+        }
         
         // Create metrics collector
         MetricsCollector metricsCollector = new MetricsCollector();
@@ -206,12 +228,31 @@ public class ExperimentRunner implements AutoCloseable {
         PerformanceMonitor performanceMonitor = new PerformanceMonitor();
         performanceMonitor.startMonitoring();
         
+
+        
         // Run simulation with progress tracking
         Future<?> progressTask = runSimulationWithProgress(simulation, experimentId, startTime);
         
         try {
             // Start simulation
             simulation.start();
+            
+            // Wait for simulation to run for a reasonable time to show resource utilization
+            // We need to wait for cloudlets to start executing and show utilization
+            double simulationTime = simulation.clock();
+            logger.debug("Simulation started, current time: {}", simulationTime);
+            
+            // Wait for a minimum simulation time to allow cloudlets to execute
+            // This ensures we capture resource utilization during execution
+            double targetSimulationTime = 5000.0; // Increased to 5000 time units for much longer execution
+            while (simulation.isRunning() && simulation.clock() < targetSimulationTime) {
+                Thread.sleep(10); // Small delay to avoid busy waiting
+            }
+            
+            // Additional wait to ensure cloudlets have time to show utilization
+            if (simulation.isRunning()) {
+                Thread.sleep(500); // Wait 500ms more for utilization to stabilize
+            }
             
             // Wait for progress task to complete
             cancelProgressTask(progressTask);
@@ -224,7 +265,7 @@ public class ExperimentRunner implements AutoCloseable {
         // Stop monitoring
         PerformanceMetrics performanceMetrics = performanceMonitor.stopMonitoring();
         
-        // Collect metrics
+        // Collect metrics after simulation has run for a while to show resource utilization
         Map<String, Double> metrics = collectExperimentMetrics(
             simulation, broker, datacenter, metricsCollector, performanceMetrics);
         
@@ -234,7 +275,7 @@ public class ExperimentRunner implements AutoCloseable {
         // Create and return result
         return createExperimentResult(
             algorithmName, scenario.getName(), replication, metrics, 
-            executionTime, broker, datacenter.getVmAllocationPolicy());
+            executionTime, broker, datacenter.getVmAllocationPolicy(), datacenter);
     }
     
     /**
@@ -242,6 +283,8 @@ public class ExperimentRunner implements AutoCloseable {
      */
     private List<Vm> createVmCopies(List<Vm> originalVms, CloudSimPlus simulation) {
         List<Vm> copies = new ArrayList<>();
+        logger.info("DEBUG: Creating VM copies from {} original VMs", originalVms.size());
+        
         for (Vm original : originalVms) {
             Vm copy = new VmSimple(original.getMips(), original.getPesNumber());
             copy.setRam(original.getRam().getCapacity());
@@ -249,7 +292,12 @@ public class ExperimentRunner implements AutoCloseable {
             copy.setSize(original.getStorage().getCapacity());
             copy.setDescription(original.getDescription());
             copies.add(copy);
+            
+            logger.debug("DEBUG: Created VM copy - ID: {}, MIPS: {}, PEs: {}, RAM: {} MB", 
+                copy.getId(), copy.getMips(), copy.getPesNumber(), copy.getRam().getCapacity());
         }
+        
+        logger.info("DEBUG: Successfully created {} VM copies", copies.size());
         return copies;
     }
     
@@ -284,13 +332,32 @@ public class ExperimentRunner implements AutoCloseable {
         Future<?> task = progressExecutor.submit(() -> {
             try {
                 ProgressTracker progressTracker = new ProgressTracker();
+                long lastProgressTime = System.currentTimeMillis();
+                double lastSimulationTime = 0.0;
                 
                 while (simulation.isRunning() && 
                        !Thread.currentThread().isInterrupted()) {
                     
-                    double progress = simulation.clock() / 1000.0; // Use fixed time for progress
-                    progressTracker.reportProgress("Simulation " + experimentId, 
-                                                 (int)(progress * 100), 100);
+                    // Only update progress every 2 seconds to avoid spam
+                    long currentTime = System.currentTimeMillis();
+                    if (currentTime - lastProgressTime < 2000) {
+                        Thread.sleep(100);
+                        continue;
+                    }
+                    
+                    double currentSimulationTime = simulation.clock();
+                    
+                    // Calculate meaningful progress based on simulation time
+                    // Target simulation time is 5000.0, so progress is current/target
+                    int progress = (int) Math.min(100, (currentSimulationTime / 5000.0) * 100);
+                    
+                    // Only log if there's actual progress or significant time has passed
+                    if (progress > 0 || currentSimulationTime > lastSimulationTime + 100) {
+                        progressTracker.reportProgress("Simulation " + experimentId, progress, 100);
+                        lastSimulationTime = currentSimulationTime;
+                    }
+                    
+                    lastProgressTime = currentTime;
                     
                     // Check timeout
                     if (Duration.between(startTime, Instant.now()).getSeconds() > SIMULATION_TIMEOUT_SECONDS) {
@@ -299,22 +366,21 @@ public class ExperimentRunner implements AutoCloseable {
                         break;
                     }
                     
-                    try {
-                        Thread.sleep(1000); // Update every second
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
+                    Thread.sleep(100);
                 }
+                
+                progressTracker.reportProgress("Simulation " + experimentId, 100, 100);
                 progressFuture.complete(null);
+                
+            } catch (InterruptedException e) {
+                logger.debug("Progress tracking interrupted for simulation {}", experimentId);
+                Thread.currentThread().interrupt();
+                progressFuture.completeExceptionally(e);
             } catch (Exception e) {
+                logger.error("Error in progress tracking for simulation {}", experimentId, e);
                 progressFuture.completeExceptionally(e);
             }
         });
-        
-        synchronized (progressTaskLock) {
-            activeProgressTasks.add(task);
-        }
         
         return task;
     }
@@ -457,15 +523,33 @@ public class ExperimentRunner implements AutoCloseable {
     
     // Rest of the methods remain the same but with thread-local considerations...
     
-    private static DatacenterSimple createDatacenter(CloudSimPlus simulation, TestScenario scenario) throws ValidationException, HippopotamusOptimizationException {
+    private static DatacenterSimple createDatacenter(CloudSimPlus simulation, TestScenario scenario, String algorithmName) throws ValidationException, HippopotamusOptimizationException {
         if (scenario.getHosts() == null || scenario.getHosts().isEmpty()) {
             throw new ValidationException("Test scenario must contain at least one host");
         }
         
         try {
             // Use DatacenterFactory to create DatacenterSimple with allocation policy in constructor
-            VmAllocationPolicy allocationPolicy = createAllocationPolicy("HO", scenario.getHosts()); // Or pass algorithmName if needed
-            return new DatacenterSimple(simulation, scenario.getHosts(), allocationPolicy);
+            VmAllocationPolicy allocationPolicy = createAllocationPolicy(algorithmName, scenario.getHosts());
+            
+            // Create datacenter with the allocation policy
+            List<Host> hostList = new ArrayList<>(scenario.getHosts()); // Create a copy
+            DatacenterSimple datacenter = new DatacenterSimple(simulation, hostList, allocationPolicy);
+            
+            // CRITICAL DEBUG: Verify allocation policy is set
+            logger.info("DEBUG: Datacenter created with allocation policy: {}", 
+                datacenter.getVmAllocationPolicy().getClass().getSimpleName());
+            logger.info("DEBUG: Allocation policy has {} hosts", 
+                datacenter.getVmAllocationPolicy().getHostList().size());
+            
+            // Set the datacenter in the allocation policy
+            if (allocationPolicy instanceof BaselineVmAllocationPolicy) {
+                BaselineVmAllocationPolicy baselinePolicy = (BaselineVmAllocationPolicy) allocationPolicy;
+                baselinePolicy.setDatacenter(datacenter);
+                logger.info("DEBUG: Set datacenter in baseline allocation policy");
+            }
+            
+            return datacenter;
         } catch (Exception e) {
             throw new HippopotamusOptimizationException(HippopotamusOptimizationException.ErrorCode.INVALID_HOST_CONFIG, "Failed to create datacenter", e);
         }
@@ -503,8 +587,19 @@ public class ExperimentRunner implements AutoCloseable {
                 default -> throw new IllegalArgumentException("Unknown algorithm: " + algorithmName);
             };
             
-            // Note: setHostList and validatePolicy methods are not available in CloudSim Plus 8.0.0
-            // The policy will be configured when used in the datacenter
+            // CRITICAL FIX: Set host list for allocation policies that need it
+            if (policy instanceof BaselineVmAllocationPolicy) {
+                BaselineVmAllocationPolicy baselinePolicy = (BaselineVmAllocationPolicy) policy;
+                baselinePolicy.setHostList(hosts);
+                logger.debug("Set {} hosts in baseline allocation policy", hosts.size());
+            }
+            
+            // CRITICAL FIX: For BestFit specifically, ensure proper host setup
+            if (policy instanceof BestFitAllocation) {
+                BestFitAllocation bestFit = (BestFitAllocation) policy;
+                bestFit.setHostList(hosts);
+                logger.debug("Manually set {} hosts in BestFit allocation policy", hosts.size());
+            }
             
             return policy;
             
@@ -522,11 +617,38 @@ public class ExperimentRunner implements AutoCloseable {
         Map<String, Double> metrics = new HashMap<>();
         
         try {
-            // Resource utilization metrics
-            double cpuUtilization = collector.calculateAverageCpuUtilization(
-                datacenter.getHostList());
-            double ramUtilization = collector.calculateAverageRamUtilization(
-                datacenter.getHostList());
+            // CRITICAL FIX: Calculate resource utilization properly
+            double cpuUtilization = 0.0;
+            double ramUtilization = 0.0;
+            int activeHosts = 0;
+            
+            for (Host host : datacenter.getHostList()) {
+                // Calculate CPU utilization based on allocated vs total MIPS
+                double totalMips = host.getTotalMipsCapacity();
+                double allocatedMips = host.getTotalAllocatedMips();
+                
+                if (totalMips > 0) {
+                    double hostCpuUtil = allocatedMips / totalMips;
+                    cpuUtilization += hostCpuUtil;
+                    activeHosts++;
+                }
+                
+                // Calculate RAM utilization based on allocated vs total RAM
+                double totalRam = host.getRam().getCapacity();
+                double allocatedRam = host.getRam().getAllocatedResource();
+                
+                if (totalRam > 0) {
+                    double hostRamUtil = allocatedRam / totalRam;
+                    ramUtilization += hostRamUtil;
+                }
+            }
+            
+            // Calculate averages
+            cpuUtilization = activeHosts > 0 ? cpuUtilization / activeHosts : 0.0;
+            ramUtilization = activeHosts > 0 ? ramUtilization / activeHosts : 0.0;
+            
+            logger.info("Resource Utilization - CPU: {:.2f}%, RAM: {:.2f}%, Active Hosts: {}", 
+                cpuUtilization * 100, ramUtilization * 100, activeHosts);
             
             metrics.put("cpuUtilization", cpuUtilization);
             metrics.put("ramUtilization", ramUtilization);
@@ -540,39 +662,46 @@ public class ExperimentRunner implements AutoCloseable {
             int slaViolations = collector.countSLAViolations(broker.getCloudletFinishedList());
             metrics.put("slaViolations", (double) slaViolations);
             
-            // VM allocation success
+            // VM allocation success - use broker's VM lists instead of host VM lists
+            // The broker's getVmCreatedList() contains VMs that were successfully allocated
             long allocatedVms = broker.getVmCreatedList().size();
             long totalVms = broker.getVmCreatedList().size() + broker.getVmFailedList().size();
+            
+            // DEBUG: Log VM allocation details
+            logger.info("DEBUG: VM Allocation Details:");
+            logger.info("DEBUG:   Total VMs created (allocated): {}", broker.getVmCreatedList().size());
+            logger.info("DEBUG:   Total VMs failed: {}", broker.getVmFailedList().size());
+            logger.info("DEBUG:   VMs currently on hosts: {}", datacenter.getHostList().stream()
+                .mapToLong(host -> host.getVmList().size()).sum());
+            logger.info("DEBUG:   Host details:");
+            for (Host host : datacenter.getHostList()) {
+                logger.info("DEBUG:     Host {}: {} VMs", host.getId(), host.getVmList().size());
+            }
+            
             metrics.put("vmAllocationSuccess", totalVms > 0 ? (double) allocatedVms / totalVms : 0.0);
+            metrics.put("vmAllocated", (double) allocatedVms);
+            metrics.put("vmTotal", (double) totalVms);
             
-            // Performance metrics
-            metrics.put("executionTimeMs", (double) performance.getExecutionTimeMillis());
-            metrics.put("peakMemoryMB", (double) performance.getPeakMemoryUsageMB());
+            // Execution time
+            metrics.put("executionTime", (double) performance.getExecutionTimeMillis());
             
-            // Cloudlet execution metrics
-            double avgCloudletExecutionTime = broker.getCloudletFinishedList().stream()
-                .mapToDouble(Cloudlet::getActualCpuTime)
-                .average()
-                .orElse(0.0);
-            metrics.put("avgCloudletExecutionTime", avgCloudletExecutionTime);
-            
-            // Host efficiency metrics
-            double avgHostEfficiency = datacenter.getHostList().stream()
-                .mapToDouble(host -> {
-                    double cpuUsage = host.getCpuUtilizationStats().getMean();
-                    // Note: getRamUtilizationStats() is not available in CloudSim Plus 8.0.0
-                    // Using CPU usage as approximation for overall efficiency
-                    return cpuUsage;
-                })
-                .average()
-                .orElse(0.0);
-            metrics.put("avgHostEfficiency", avgHostEfficiency);
-            
-            logger.debug("Collected {} metrics for experiment", metrics.size());
+            // Convergence iterations (for optimization algorithms)
+            int convergenceIterations = 1; // Default for non-optimization algorithms
+            // Note: For now using default value, can be enhanced later with actual iteration tracking
+            metrics.put("convergenceIterations", (double) convergenceIterations);
             
         } catch (Exception e) {
-            logger.error("Error collecting metrics", e);
-            // Return partial metrics rather than failing completely
+            logger.error("Error collecting experiment metrics", e);
+            // Set default values
+            metrics.put("cpuUtilization", 0.0);
+            metrics.put("ramUtilization", 0.0);
+            metrics.put("powerConsumption", 0.0);
+            metrics.put("slaViolations", 0.0);
+            metrics.put("vmAllocationSuccess", 0.0);
+            metrics.put("vmAllocated", 0.0);
+            metrics.put("vmTotal", 0.0);
+            metrics.put("executionTime", 0.0);
+            metrics.put("convergenceIterations", 0.0);
         }
         
         return metrics;
@@ -584,7 +713,8 @@ public class ExperimentRunner implements AutoCloseable {
                                                          Map<String, Double> metrics,
                                                          Duration executionTime,
                                                          DatacenterBroker broker,
-                                                         VmAllocationPolicy policy) {
+                                                         VmAllocationPolicy policy,
+                                                         DatacenterSimple datacenter) {
         ExperimentResult result = new ExperimentResult();
         
         // Basic information
@@ -593,18 +723,36 @@ public class ExperimentRunner implements AutoCloseable {
         result.setReplication(replication);
         result.setTimestamp(Instant.now());
         
-        // Metrics
-        result.setResourceUtilizationCPU(metrics.getOrDefault("cpuUtilization", 0.0));
-        result.setResourceUtilizationRAM(metrics.getOrDefault("ramUtilization", 0.0));
+        // Metrics - convert to percentages for display
+        result.setResourceUtilizationCPU(metrics.getOrDefault("cpuUtilization", 0.0) * 100.0);
+        result.setResourceUtilizationRAM(metrics.getOrDefault("ramUtilization", 0.0) * 100.0);
         result.setPowerConsumption(metrics.getOrDefault("powerConsumption", 0.0));
         result.setSlaViolations(metrics.getOrDefault("slaViolations", 0.0).intValue());
         result.setExecutionTime(executionTime.toMillis() / 1000.0); // Convert to seconds
         
         // VM allocation metrics
+        result.setVmAllocated(metrics.getOrDefault("vmAllocated", 0.0).intValue());
+        result.setVmTotal(metrics.getOrDefault("vmTotal", 0.0).intValue());
+        
+        // VM allocation metrics - use broker's VM lists instead of host VM lists
+        // The broker's getVmCreatedList() contains VMs that were successfully allocated
         int totalVms = broker.getVmCreatedList().size() + broker.getVmFailedList().size();
-        int allocatedVms = broker.getVmCreatedList().size();
+        int allocatedVms = broker.getVmCreatedList().size(); // VMs that were successfully allocated
         result.setVmAllocated(allocatedVms);
         result.setVmTotal(totalVms);
+        
+        // Set VMs and hosts for validation - use the VMs that were created and the hosts from datacenter
+        // Even though VMs are deallocated now, we use the created VMs list for validation
+        result.setVms(broker.getVmCreatedList());
+        result.setHosts(datacenter.getHostList());
+        
+        // DEBUG: Log the values being set in ExperimentResult
+        logger.info("DEBUG: ExperimentResult VM values - allocatedVms: {}, totalVms: {}", allocatedVms, totalVms);
+        logger.info("DEBUG: ExperimentResult after setting - getVmAllocated(): {}, getVmTotal(): {}", 
+                   result.getVmAllocated(), result.getVmTotal());
+        logger.info("DEBUG: ExperimentResult VMs and Hosts - VMs: {}, Hosts: {}", 
+                   result.getVms() != null ? result.getVms().size() : "null", 
+                   result.getHosts() != null ? result.getHosts().size() : "null");
         
         // Algorithm-specific metrics
         if (algorithmName.equalsIgnoreCase("HO") && 

@@ -31,7 +31,7 @@ public class ExperimentCoordinator {
     private final List<String> algorithms = Arrays.asList(
         "HO",        // Hippopotamus Optimization
         "FirstFit",  // First Fit heuristic
-        "BestFit",   // Best Fit heuristic
+        // "BestFit",   // Best Fit heuristic (DISABLED due to known bug)
         "GA"         // Genetic Algorithm
     );
     
@@ -44,13 +44,13 @@ public class ExperimentCoordinator {
         "XLarge"    // 500 VMs, 100 Hosts
     );
     
-    // Scenario specifications
-    private final Map<String, ScenarioSpec> scenarioSpecs = Map.of(
-        "Micro", new ScenarioSpec("Micro", 10, 3, 1),
-        "Small", new ScenarioSpec("Small", 50, 10, 2),
-        "Medium", new ScenarioSpec("Medium", 100, 20, 3),
-        "Large", new ScenarioSpec("Large", 200, 40, 4),
-        "XLarge", new ScenarioSpec("XLarge", 500, 100, 5)
+    // Scenario specifications - REDUCED for verification (faster execution time)
+    private static final Map<String, ScenarioSpec> scenarioSpecs = Map.of(
+        "Micro", new ScenarioSpec("Micro", 10, 3, 1),      // 10 VMs, 3 Hosts, complexity 1
+        "Small", new ScenarioSpec("Small", 25, 8, 1),      // 25 VMs, 8 Hosts, complexity 1
+        "Medium", new ScenarioSpec("Medium", 50, 15, 2),   // 50 VMs, 15 Hosts, complexity 2
+        "Large", new ScenarioSpec("Large", 100, 30, 2),    // 100 VMs, 30 Hosts, complexity 2
+        "XLarge", new ScenarioSpec("XLarge", 200, 50, 3)   // 200 VMs, 50 Hosts, complexity 3
     );
     
     // Configuration parameters
@@ -74,7 +74,7 @@ public class ExperimentCoordinator {
      * Creates a new ExperimentCoordinator with default configuration.
      */
     public ExperimentCoordinator() {
-        this(5, false); // Default: batch size 5, sequential execution
+        this(10, false); // Default: batch size 10, sequential execution for research scale
     }
     
     /**
@@ -208,15 +208,16 @@ public class ExperimentCoordinator {
      */
     private void runScenarioBatch(String scenario, ProgressTracker tracker, 
                                   int startCount, int totalCount) {
-        logger.info("Starting scenario batch: {} (VM: {}, Hosts: {})", 
-            scenario, 
-            scenarioSpecs.get(scenario).vmCount,
-            scenarioSpecs.get(scenario).hostCount);
+        tracker.setCurrentScenario(scenario);
+        tracker.printInfo("Starting scenario batch: " + scenario + 
+                         " (VMs: " + scenarioSpecs.get(scenario).vmCount + 
+                         ", Hosts: " + scenarioSpecs.get(scenario).hostCount + ")");
         
         // Check and log memory status
         MemoryManager.checkMemoryUsage("Scenario Start: " + scenario);
         
         for (String algorithm : algorithms) {
+            tracker.setCurrentAlgorithm(algorithm);
             String experimentKey = algorithm + "_" + scenario;
             ExperimentStatus status = experimentStatus.get(experimentKey);
             status.setStartTime(System.currentTimeMillis());
@@ -238,13 +239,13 @@ public class ExperimentCoordinator {
                 status.setEndTime(System.currentTimeMillis());
                 
             } catch (Exception e) {
-                logger.error("Failed to complete {} on scenario {}", algorithm, scenario, e);
+                tracker.printError("Failed to complete " + algorithm + " on scenario " + scenario + ": " + e.getMessage());
                 status.setStatus(ExperimentStatus.Status.FAILED);
                 status.setErrorMessage(e.getMessage());
             }
         }
         
-        logger.info("Completed scenario batch: {}", scenario);
+        tracker.printInfo("Completed scenario batch: " + scenario);
     }
     
     /**
@@ -259,9 +260,9 @@ public class ExperimentCoordinator {
      */
     private void processBatch(String algorithm, String scenario, List<Integer> replicationBatch,
                               ProgressTracker tracker, int baseCount, int totalCount) {
-        logger.debug("Processing batch: {} {} replications {}-{}", 
-            algorithm, scenario, replicationBatch.get(0), 
-            replicationBatch.get(replicationBatch.size() - 1));
+        tracker.printInfo("Processing batch: " + algorithm + " " + scenario + 
+                         " replications " + replicationBatch.get(0) + "-" + 
+                         replicationBatch.get(replicationBatch.size() - 1));
         
         if (parallelExecution && executorService != null) {
             // Parallel execution
@@ -278,30 +279,29 @@ public class ExperimentCoordinator {
                     ExperimentResult result = futures.get(i).get(5, TimeUnit.MINUTES);
                     if (result != null) {
                         saveResult(result);
-                        tracker.reportProgress("Experiments", 
-                            baseCount + replicationBatch.get(i) + 1, totalCount);
+                        tracker.incrementCompleted();
                     }
                 } catch (TimeoutException e) {
-                    logger.error("Timeout for {} {} rep {}", 
-                        algorithm, scenario, replicationBatch.get(i));
+                    tracker.printError("Timeout for " + algorithm + " " + scenario + 
+                                     " rep " + replicationBatch.get(i));
                 } catch (Exception e) {
-                    logger.error("Error collecting result for {} {} rep {}", 
-                        algorithm, scenario, replicationBatch.get(i), e);
+                    tracker.printError("Error collecting result for " + algorithm + " " + 
+                                     scenario + " rep " + replicationBatch.get(i) + ": " + e.getMessage());
                 }
             }
         } else {
             // Sequential execution
             for (Integer replication : replicationBatch) {
                 try {
+                    tracker.setCurrentReplication(replication);
                     ExperimentResult result = runSingleExperiment(algorithm, scenario, replication);
                     if (result != null) {
                         saveResult(result);
-                        tracker.reportProgress("Experiments", 
-                            baseCount + replication + 1, totalCount);
+                        tracker.incrementCompleted();
                     }
                 } catch (Exception e) {
-                    logger.error("Failed experiment: {} {} rep {}", 
-                        algorithm, scenario, replication, e);
+                    tracker.printError("Failed experiment: " + algorithm + " " + 
+                                     scenario + " rep " + replication + ": " + e.getMessage());
                 }
             }
         }
@@ -571,7 +571,7 @@ public class ExperimentCoordinator {
         
         // Check memory
         long maxHeap = Runtime.getRuntime().maxMemory();
-        long requiredHeap = 5L * 1024 * 1024 * 1024; // 5GB minimum
+        long requiredHeap = 2L * 1024 * 1024 * 1024; // 2GB minimum for verification
         
         if (maxHeap < requiredHeap) {
             throw new ValidationException(String.format(

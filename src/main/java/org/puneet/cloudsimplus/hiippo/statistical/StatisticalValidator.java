@@ -146,14 +146,19 @@ public class StatisticalValidator {
             
             // Step 4: Perform ANOVA if applicable
             if (experimentResults.size() > 2) {
-                ANOVAResult anovaResult = performANOVA(experimentResults);
-                result.setAnovaResult(anovaResult);
-                
-                // If ANOVA is significant, we can proceed with post-hoc tests
-                if (anovaResult.isSignificant()) {
-                    logger.info("ANOVA significant, pairwise comparisons are justified");
-                } else {
-                    logger.warn("ANOVA not significant, interpret pairwise comparisons with caution");
+                try {
+                    ANOVAResult anovaResult = performANOVA(experimentResults);
+                    result.setAnovaResult(anovaResult);
+                    
+                    // If ANOVA is significant, we can proceed with post-hoc tests
+                    if (anovaResult.isSignificant()) {
+                        logger.info("ANOVA significant, pairwise comparisons are justified");
+                    } else {
+                        logger.warn("ANOVA not significant, interpret pairwise comparisons with caution");
+                    }
+                } catch (StatisticalValidationException e) {
+                    logger.warn("ANOVA failed due to data quality issues: {}", e.getMessage());
+                    // Continue with pairwise comparisons even if ANOVA fails
                 }
             }
             
@@ -603,12 +608,8 @@ public class StatisticalValidator {
         return normality;
     }
 
-    private ANOVAResult performANOVA(Map<String, double[]> experimentResults) {
-        try {
-            return ANOVAResult.performANOVA(experimentResults, "Metric", SIGNIFICANCE_LEVEL);
-        } catch (org.puneet.cloudsimplus.hiippo.exceptions.StatisticalValidationException e) {
-            throw new RuntimeException(e);
-        }
+    private ANOVAResult performANOVA(Map<String, double[]> experimentResults) throws StatisticalValidationException {
+        return ANOVAResult.performANOVA(experimentResults, "Metric", SIGNIFICANCE_LEVEL);
     }
 
     private Map<String, ConfidenceInterval> calculateConfidenceIntervals(Map<String, DescriptiveStatistics> algorithmStats) {

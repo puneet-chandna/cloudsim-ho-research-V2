@@ -60,9 +60,9 @@ public class TestScenarios {
     
     // Host Configurations (PEs, MIPS per PE, RAM MB, BW Mbps, Storage MB, Max Power W, Static Power %)
     private static final Map<String, HostConfig> HOST_CONFIGS = Map.of(
-        HOST_BASIC, new HostConfig(4, 3000, 8192, 1000, 100000, 250, 0.7),
-        HOST_STANDARD, new HostConfig(8, 3000, 16384, 2000, 200000, 300, 0.7),
-        HOST_POWERFUL, new HostConfig(16, 3000, 32768, 4000, 400000, 400, 0.7)
+        HOST_BASIC, new HostConfig(4, 3000, 8192, 1000, 100000, 250, 175),      // 70% of 250W = 175W
+        HOST_STANDARD, new HostConfig(8, 3000, 16384, 2000, 200000, 300, 210), // 70% of 300W = 210W
+        HOST_POWERFUL, new HostConfig(16, 3000, 32768, 4000, 400000, 400, 280) // 70% of 400W = 280W
     );
     
     /**
@@ -272,33 +272,22 @@ public class TestScenarios {
         logger.debug("Creating {} cloudlets for VMs", vms.size());
         
         Random random = ExperimentConfig.getRandomGenerator(0);
+        List<Cloudlet> cloudlets = new ArrayList<>();
         
-        return IntStream.range(0, vms.size())
-            .mapToObj(i -> {
-                Vm vm = vms.get(i);
-                
-                // Cloudlet length proportional to VM capacity
-                long length = (long) (vm.getTotalMipsCapacity() * 1000 * 
-                    (0.8 + random.nextDouble() * 0.4)); // 80-120% variation
-                
-                // Dynamic utilization model (varies between 10% and 90%)
-                UtilizationModel cpuModel = new UtilizationModelDynamic(0.1)
-                    .setMaxResourceUtilization(0.9);
-                UtilizationModel ramModel = new UtilizationModelDynamic(0.2)
-                    .setMaxResourceUtilization(0.8);
-                UtilizationModel bwModel = new UtilizationModelDynamic(0.1)
-                    .setMaxResourceUtilization(0.5);
-                
-                Cloudlet cloudlet = new CloudletSimple(i, length, (int) vm.getPesNumber());
-                cloudlet.setFileSize(300)
-                    .setOutputSize(300)
-                    .setUtilizationModelCpu(cpuModel)
-                    .setUtilizationModelRam(ramModel)
-                    .setUtilizationModelBw(bwModel);
-                
-                return cloudlet;
-            })
-            .collect(Collectors.toList());
+        // Create cloudlets for VMs with much longer execution time to show resource utilization
+        for (int i = 0; i < vms.size(); i++) {
+            Vm vm = vms.get(i);
+            // Create much longer cloudlets to show actual resource utilization
+            long length = (long) (vm.getMips() * 500000);  // Increased to 500000 for much longer execution
+            Cloudlet cloudlet = new CloudletSimple(i, length, (int) vm.getPesNumber())
+                .setFileSize(5000)  // Increased file size
+                .setOutputSize(5000) // Increased output size
+                .setUtilizationModelCpu(new UtilizationModelFull())
+                .setUtilizationModelRam(new UtilizationModelFull())
+                .setUtilizationModelBw(new UtilizationModelFull());
+            cloudlets.add(cloudlet);
+        }
+        return cloudlets;
     }
     
     /**

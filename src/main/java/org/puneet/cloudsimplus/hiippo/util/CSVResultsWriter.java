@@ -31,14 +31,14 @@ import java.util.stream.Collectors;
 public class CSVResultsWriter {
     private static final Logger logger = LoggerFactory.getLogger(CSVResultsWriter.class);
     
-    // Directory structure
-    private static final String BASE_RESULTS_DIR = "results";
-    private static final String RAW_RESULTS_DIR = BASE_RESULTS_DIR + "/raw_results";
-    private static final String STATISTICAL_DIR = BASE_RESULTS_DIR + "/statistical_analysis";
-    private static final String PARAMETER_SENSITIVITY_DIR = BASE_RESULTS_DIR + "/parameter_sensitivity";
-    private static final String SCALABILITY_DIR = BASE_RESULTS_DIR + "/scalability_analysis";
-    private static final String CONVERGENCE_DIR = BASE_RESULTS_DIR + "/convergence_data";
-    private static final String COMPARISON_DIR = BASE_RESULTS_DIR + "/comparison_data";
+    // Directory structure - will be set by RunManager
+    private static String BASE_RESULTS_DIR;
+    private static String RAW_RESULTS_DIR;
+    private static String STATISTICAL_DIR;
+    private static String PARAMETER_SENSITIVITY_DIR;
+    private static String SCALABILITY_DIR;
+    private static String CONVERGENCE_DIR;
+    private static String COMPARISON_DIR;
     
     // File names
     private static final String MAIN_RESULTS_FILE = "main_results.csv";
@@ -90,32 +90,52 @@ public class CSVResultsWriter {
     private static final Map<String, Integer> recordCounts = new ConcurrentHashMap<>();
     
     static {
-        initializeDirectories();
+        // Initialize with default paths first
+        initializeDefaultPaths();
         initializeFileLocks();
     }
     
     /**
-     * Initializes all required directories for results storage.
-     * Creates directories if they don't exist and handles permission issues.
+     * Initializes the CSVResultsWriter with run-specific paths.
+     * This method should be called after RunManager is initialized.
      */
-    private static void initializeDirectories() {
+    public static void initializeWithRunManager() {
         try {
-            List<String> directories = Arrays.asList(
-                RAW_RESULTS_DIR, STATISTICAL_DIR, PARAMETER_SENSITIVITY_DIR,
-                SCALABILITY_DIR, CONVERGENCE_DIR, COMPARISON_DIR
-            );
+            RunManager runManager = RunManager.getInstance();
             
-            for (String dir : directories) {
-                Path path = Paths.get(dir);
-                if (!Files.exists(path)) {
-                    Files.createDirectories(path);
-                    logger.info("Created directory: {}", path.toAbsolutePath());
-                }
-            }
-        } catch (IOException e) {
-            logger.error("Failed to create results directories", e);
-            throw new RuntimeException("Cannot initialize results directories", e);
+            // Set base directories
+            BASE_RESULTS_DIR = runManager.getResultsPath().toString();
+            RAW_RESULTS_DIR = runManager.getResultsSubdirectory("raw_results").toString();
+            STATISTICAL_DIR = runManager.getResultsSubdirectory("statistical_analysis").toString();
+            PARAMETER_SENSITIVITY_DIR = runManager.getResultsSubdirectory("parameter_sensitivity").toString();
+            SCALABILITY_DIR = runManager.getResultsSubdirectory("scalability_analysis").toString();
+            CONVERGENCE_DIR = runManager.getResultsSubdirectory("convergence_data").toString();
+            COMPARISON_DIR = runManager.getResultsSubdirectory("comparison_data").toString();
+            
+            // Create directories if they don't exist
+            createDirectoriesIfNotExist();
+            
+            logger.info("CSVResultsWriter initialized with run ID: {}", runManager.getRunId());
+            logger.info("Results base directory: {}", BASE_RESULTS_DIR);
+            
+        } catch (Exception e) {
+            logger.error("Failed to initialize CSVResultsWriter with RunManager", e);
+            // Fall back to default paths
+            initializeDefaultPaths();
         }
+    }
+    
+    /**
+     * Initializes with default paths for backward compatibility.
+     */
+    private static void initializeDefaultPaths() {
+        BASE_RESULTS_DIR = "results";
+        RAW_RESULTS_DIR = BASE_RESULTS_DIR + "/raw_results";
+        STATISTICAL_DIR = BASE_RESULTS_DIR + "/statistical_analysis";
+        PARAMETER_SENSITIVITY_DIR = BASE_RESULTS_DIR + "/parameter_sensitivity";
+        SCALABILITY_DIR = BASE_RESULTS_DIR + "/scalability_analysis";
+        CONVERGENCE_DIR = BASE_RESULTS_DIR + "/convergence_data";
+        COMPARISON_DIR = BASE_RESULTS_DIR + "/comparison_data";
     }
     
     /**
@@ -135,6 +155,24 @@ public class CSVResultsWriter {
     }
     
     /**
+     * Creates all necessary directories for results storage.
+     */
+    private static void createDirectoriesIfNotExist() {
+        try {
+            Files.createDirectories(Paths.get(RAW_RESULTS_DIR));
+            Files.createDirectories(Paths.get(STATISTICAL_DIR));
+            Files.createDirectories(Paths.get(PARAMETER_SENSITIVITY_DIR));
+            Files.createDirectories(Paths.get(SCALABILITY_DIR));
+            Files.createDirectories(Paths.get(CONVERGENCE_DIR));
+            Files.createDirectories(Paths.get(COMPARISON_DIR));
+            
+            logger.debug("Created all results directories");
+        } catch (IOException e) {
+            logger.error("Failed to create results directories", e);
+        }
+    }
+    
+    /**
      * Writes a single experiment result to the main results file.
      * 
      * @param result The experiment result to write
@@ -142,6 +180,12 @@ public class CSVResultsWriter {
      */
     public static void writeResult(ExperimentResult result) throws IOException {
         Objects.requireNonNull(result, "Result cannot be null");
+        
+        // DEBUG: Log the values being written to CSV
+        logger.info("DEBUG: CSV Writing - Algorithm: {}, Scenario: {}, Replication: {}", 
+                   result.getAlgorithm(), result.getScenario(), result.getReplication());
+        logger.info("DEBUG: CSV Writing - VmAllocated: {}, VmTotal: {}", 
+                   result.getVmAllocated(), result.getVmTotal());
         
         String[] record = new String[] {
             result.getAlgorithm(),
@@ -157,6 +201,9 @@ public class CSVResultsWriter {
             String.valueOf(result.getVmTotal()),
             LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         };
+        
+        // DEBUG: Log the record being written
+        logger.info("DEBUG: CSV Record: {}", String.join(",", record));
         
         writeRecord(RAW_RESULTS_DIR + "/" + MAIN_RESULTS_FILE, MAIN_FORMAT, record);
     }
@@ -360,14 +407,15 @@ public class CSVResultsWriter {
             
             try (BufferedWriter writer = Files.newBufferedWriter(path, StandardOpenOption.CREATE,
                     StandardOpenOption.APPEND);
-                 CSVPrinter printer = new CSVPrinter(writer, format)) {
+                 CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT)) {
                 
                 if (!fileExists) {
+                    // Write header only for new files
                     printer.printRecord(format.getHeader());
                 }
                 
                 for (String[] record : records) {
-                    printer.printRecord((Object[]) record);
+                    printer.printRecord(Arrays.asList(record).toArray());
                 }
                 
                 printer.flush();

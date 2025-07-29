@@ -389,12 +389,28 @@ public class ANOVAResult {
                 "ANOVA requires at least " + MIN_GROUPS + " groups");
         }
         
+        // Check for all-zero data which would cause F-statistic errors
+        boolean allZero = true;
         for (Map.Entry<String, double[]> entry : data.entrySet()) {
             if (entry.getValue() == null || entry.getValue().length < MIN_OBSERVATIONS_PER_GROUP) {
                 throw new StatisticalValidationException(
                     StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR,
                     "Group '" + entry.getKey() + "' has insufficient observations");
             }
+            
+            // Check if this group has any non-zero values
+            for (double value : entry.getValue()) {
+                if (value != 0.0) {
+                    allZero = false;
+                    break;
+                }
+            }
+        }
+        
+        if (allZero) {
+            throw new StatisticalValidationException(
+                StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR,
+                "All data values are zero, cannot perform ANOVA");
         }
     }
     

@@ -355,36 +355,47 @@ public class HippopotamusOptimization {
      */
     public double evaluateFitness(HippopotamusVmAllocationPolicy.Solution solution) {
         if (solution == null || solution.getAllocations().isEmpty()) {
-            return Double.MAX_VALUE;
+            logger.warn("Empty solution provided to fitness evaluation");
+            return 1000.0; // High penalty for empty solutions
         }
         
-        // Calculate resource utilization
-        double cpuUtilization = calculateCpuUtilization(solution);
-        double ramUtilization = calculateRamUtilization(solution);
-        double resourceUtilization = (cpuUtilization + ramUtilization) / 2.0;
-        
-        // Calculate power consumption
-        double powerConsumption = calculatePowerConsumption(solution);
-        
-        // Calculate SLA violations
-        double slaViolations = calculateSLAViolations(solution);
-        
-        // Normalize values to [0,1] range
-        resourceUtilization = Math.max(0.0, Math.min(1.0, resourceUtilization));
-        powerConsumption = Math.max(0.0, Math.min(1.0, powerConsumption / 1000.0));
-        slaViolations = Math.max(0.0, Math.min(1.0, slaViolations));
-        
-        // Calculate weighted fitness
-        double fitness = 
-            parameters.getWeightUtilization() * (1.0 - resourceUtilization) +
-            parameters.getWeightPower() * powerConsumption +
-            parameters.getWeightSLA() * slaViolations;
-        
-        // Cache fitness for memory efficiency
-        String cacheKey = solution.getCacheKey();
-        solutionCache.put(cacheKey, solution);
-        
-        return fitness;
+        try {
+            // Calculate resource utilization
+            double cpuUtilization = calculateCpuUtilization(solution);
+            double ramUtilization = calculateRamUtilization(solution);
+            double resourceUtilization = (cpuUtilization + ramUtilization) / 2.0;
+            
+            // Calculate power consumption
+            double powerConsumption = calculatePowerConsumption(solution);
+            
+            // Calculate SLA violations
+            double slaViolations = calculateSlaViolations(solution);
+            
+            // Normalize values to ensure they are meaningful
+            resourceUtilization = Math.max(0.1, Math.min(1.0, resourceUtilization)); // Ensure between 0.1 and 1.0
+            powerConsumption = Math.max(1.0, powerConsumption); // Ensure at least 1.0
+            slaViolations = Math.max(0.0, Math.min(1.0, slaViolations)); // Ensure between 0.0 and 1.0
+            
+            // Calculate weighted fitness (lower is better)
+            double fitness = AlgorithmConstants.W_UTILIZATION * (1.0 - resourceUtilization) + 
+                           AlgorithmConstants.W_POWER * (powerConsumption / 1000.0) + 
+                           AlgorithmConstants.W_SLA * slaViolations;
+            
+            // Ensure fitness is positive and meaningful
+            fitness = Math.max(0.1, fitness);
+            
+            // Store fitness in history for convergence analysis
+            fitnessHistory.add(fitness);
+            
+            logger.debug("Fitness calculation - Resource: {:.4f}, Power: {:.4f}, SLA: {:.4f}, Total: {:.4f}", 
+                        resourceUtilization, powerConsumption, slaViolations, fitness);
+            
+            return fitness;
+            
+        } catch (Exception e) {
+            logger.error("Error calculating fitness: {}", e.getMessage());
+            return 1000.0; // High penalty for calculation errors
+        }
     }
     
     /**
@@ -473,7 +484,7 @@ public class HippopotamusOptimization {
      * @param solution the solution
      * @return the number of SLA violations
      */
-    private double calculateSLAViolations(HippopotamusVmAllocationPolicy.Solution solution) {
+    private double calculateSlaViolations(HippopotamusVmAllocationPolicy.Solution solution) {
         Map<Host, List<Vm>> hostVms = solution.getHostVmsMap();
         
         int violations = 0;

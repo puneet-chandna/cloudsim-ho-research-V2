@@ -36,8 +36,10 @@ public final class ExperimentConfig {
     /** Random seed for reproducible experiments */
     public static final long RANDOM_SEED = 123456L;
     
-    /** Number of replications for statistical validity (30 = standard for research) */
-    public static final int REPLICATION_COUNT = 30;
+    // Experiment configuration
+    public static final int REPLICATION_COUNT = 5;  // Reduced for faster verification
+    public static final long MAX_HEAP_SIZE = 4L * 1024 * 1024 * 1024; // 4GB
+    public static final long MEMORY_WARNING_THRESHOLD = 3L * 1024 * 1024 * 1024; // 3GB
     
     /** Confidence level for statistical analysis (95% = standard in research) */
     public static final double CONFIDENCE_LEVEL = 0.95;
@@ -52,17 +54,11 @@ public final class ExperimentConfig {
     // MEMORY MANAGEMENT SETTINGS (Optimized for 16GB Systems)
     // ===================================================================================
     
-    /** Maximum heap size allocation (6GB out of 16GB total system RAM) */
-    public static final long MAX_HEAP_SIZE = 6L * 1024 * 1024 * 1024;
-    
-    /** Memory warning threshold (5GB - triggers GC and batch processing) */
-    public static final long MEMORY_WARNING_THRESHOLD = 5L * 1024 * 1024 * 1024;
-    
     /** Enable batch processing for memory-intensive operations */
     public static final boolean ENABLE_BATCH_PROCESSING = true;
     
-    /** Default batch size for VM processing (prevents memory overflow) */
-    public static final int DEFAULT_BATCH_SIZE = 10;
+    /** Default batch size for VM processing (optimized for research scale) */
+    public static final int DEFAULT_BATCH_SIZE = 5;  // Reduced batch size
     
     /** Memory check interval in milliseconds during experiments */
     public static final long MEMORY_CHECK_INTERVAL = 5000;

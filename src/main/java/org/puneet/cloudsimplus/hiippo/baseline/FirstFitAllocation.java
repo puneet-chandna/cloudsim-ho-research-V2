@@ -135,8 +135,8 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
                         logger.debug("Host {} is suitable for VM {} - attempting allocation", 
                             host.getId(), vm.getId());
                         
-                        // Attempt allocation
-                        HostSuitability suitability = allocateHostForVm(vm, host);
+                        // Attempt allocation using parent class method
+                        HostSuitability suitability = super.allocateHostForVm(vm, host);
                         
                         if (suitability != HostSuitability.NULL) {
                             // Track successful allocation
