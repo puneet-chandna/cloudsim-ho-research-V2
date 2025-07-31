@@ -94,7 +94,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0-M7</version>
                 <configuration>
-                    <argLine>-Xmx3G</argLine>
+                    <argLine>-Xmx4G -Xms2G</argLine>
                     <parallel>methods</parallel>
                     <threadCount>2</threadCount>
                 </configuration>
@@ -106,7 +106,7 @@
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>org.puneet.cloudsimplus.hiippo.App</mainClass>
-                    <commandlineArgs>-Xmx6G -XX:+UseG1GC -XX:MaxGCPauseMillis=200</commandlineArgs>
+                    <commandlineArgs>-Xmx8G -Xms4G -XX:+UseG1GC -XX:MaxGCPauseMillis=200</commandlineArgs>
                 </configuration>
             </plugin>
             
