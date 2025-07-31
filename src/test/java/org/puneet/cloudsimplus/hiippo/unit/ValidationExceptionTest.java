@@ -55,21 +55,21 @@ class ValidationExceptionTest {
     void testInvalidSizeFactory() {
         ValidationException ex = ValidationException.invalidSize("list", 2, 3, "EQUALS");
         assertEquals(ValidationException.ValidationType.SIZE_VALIDATION, ex.getValidationType());
-        assertTrue(ex.getDetailedMessage().contains("invalid size"));
+        assertTrue(ex.getDetailedMessage().contains("Size validation failed"));
     }
 
     @Test
     void testInvalidConfigurationFactory() {
         ValidationException ex = ValidationException.invalidConfiguration("config", "bad", Map.of("k", "v"));
         assertEquals(ValidationException.ValidationType.CONFIGURATION_VALIDATION, ex.getValidationType());
-        assertTrue(ex.getDetailedMessage().contains("invalid configuration"));
+        assertTrue(ex.getDetailedMessage().contains("Invalid configuration"));
     }
 
     @Test
     void testConstraintViolationFactory() {
         ValidationException ex = ValidationException.constraintViolation("constraint", 1, "must be > 0");
         assertEquals(ValidationException.ValidationType.CONSTRAINT_VALIDATION, ex.getValidationType());
-        assertTrue(ex.getDetailedMessage().contains("constraint violation"));
+        assertTrue(ex.getDetailedMessage().contains("Constraint"));
     }
 
     @Test
@@ -77,7 +77,7 @@ class ValidationExceptionTest {
         ValidationException.ValidationError error = new ValidationException.ValidationError("f", 1, 2, "EQUALS");
         ValidationException ex = ValidationException.invalidResult("type", List.of(error));
         assertEquals(ValidationException.ValidationType.RESULT_VALIDATION, ex.getValidationType());
-        assertTrue(ex.getDetailedMessage().contains("invalid result"));
+        assertTrue(ex.getDetailedMessage().contains("Result validation failed"));
     }
 
     @Test
@@ -96,6 +96,6 @@ class ValidationExceptionTest {
                 ValidationException.ValidationType.FORMAT_VALIDATION, "Format error");
         String str = ex.toString();
         assertTrue(str.contains("ValidationException"));
-        assertTrue(str.contains("FORMAT_VALIDATION"));
+        assertTrue(str.contains("VAL006")); // FORMAT_VALIDATION code
     }
 } 

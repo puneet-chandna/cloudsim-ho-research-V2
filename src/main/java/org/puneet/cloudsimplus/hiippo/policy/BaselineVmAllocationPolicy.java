@@ -380,20 +380,39 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
         List<Host> suitableHosts = new ArrayList<>();
         
         try {
+            int totalHosts = getHostList().size();
+            int suitableCount = 0;
+            int validatorRejectedCount = 0;
+            
             for (Host host : getHostList()) {
                 if (host == null || host == Host.NULL) {
                     continue;
                 }
                 
                 if (Boolean.TRUE.equals(host.isSuitableForVm(vm))) {
+                    suitableCount++;
                     // Additional validation
-                    if (allocationValidator != null && 
-                        allocationValidator.validateVmPlacement(vm, host).isValid()) {
-                        suitableHosts.add(host);
-                    } else if (allocationValidator == null) {
+                    if (allocationValidator != null) {
+                        AllocationValidator.ValidationResult result = allocationValidator.validateVmPlacement(vm, host);
+                        if (result.isValid()) {
+                            suitableHosts.add(host);
+                        } else {
+                            validatorRejectedCount++;
+                            if (detailedLogging) {
+                                logger.debug("VM {} rejected for host {} by validator: {}", 
+                                    vm.getId(), host.getId(), result.getViolations());
+                            }
+                        }
+                    } else {
                         suitableHosts.add(host);
                     }
                 }
+            }
+            
+            // Log allocation statistics
+            if (detailedLogging || suitableHosts.isEmpty()) {
+                logger.info("VM {} allocation - Total hosts: {}, Suitable: {}, Validator rejected: {}, Final suitable: {}", 
+                    vm.getId(), totalHosts, suitableCount, validatorRejectedCount, suitableHosts.size());
             }
             
             // Sort by available resources (descending)

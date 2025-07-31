@@ -48,11 +48,11 @@ public class DatacenterFactory {
     
     // Power model constants (based on real server specifications)
     private static final double MAX_POWER_WATTS = 250.0;
-    private static final double STATIC_POWER_PERCENT = 0.7; // 70% of max power
+    private static final double STATIC_POWER_WATTS = 175.0; // 70% of max power (250 * 0.7)
     private static final double STARTUP_DELAY = 0.0;
     private static final double SHUTDOWN_DELAY = 0.0;
-    private static final double STARTUP_POWER = 0.0;
-    private static final double SHUTDOWN_POWER = 0.0;
+    private static final double STARTUP_POWER = 50.0; // 50 watts startup power
+    private static final double SHUTDOWN_POWER = 25.0; // 25 watts shutdown power
     
     /**
      * Creates a datacenter with the specified number of hosts and VM allocation policy.
@@ -233,7 +233,7 @@ public class DatacenterFactory {
      * @return Configured PowerModelHost instance
      */
     private static PowerModelHost createPowerModel() {
-        return new PowerModelHostSimple(MAX_POWER_WATTS, STATIC_POWER_PERCENT)
+        return new PowerModelHostSimple(MAX_POWER_WATTS, STATIC_POWER_WATTS)
             .setStartupDelay(STARTUP_DELAY)
             .setShutDownDelay(SHUTDOWN_DELAY)
             .setStartupPower(STARTUP_POWER)

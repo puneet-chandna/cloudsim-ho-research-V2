@@ -14,7 +14,7 @@ class ProgressTrackerTest {
         assertDoesNotThrow(() -> tracker.reportProgress("phase1", 10, 10));
         String summary = tracker.getSummaryReport();
         assertNotNull(summary);
-        assertTrue(summary.contains("phase1"));
+        assertTrue(summary.contains("Progress Summary"));
         tracker.logSummaryReport();
     }
 

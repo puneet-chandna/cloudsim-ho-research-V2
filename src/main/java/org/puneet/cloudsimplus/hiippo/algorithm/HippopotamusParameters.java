@@ -125,14 +125,14 @@ public class HippopotamusParameters {
      * @throws IllegalArgumentException if any parameter is invalid
      */
     private void validateParameters() {
-        if (populationSize <= 0 || populationSize > 100) {
+        if (populationSize <= 0 || populationSize > AlgorithmConstants.MAX_POPULATION_SIZE) {
             throw new IllegalArgumentException(
-                "Population size must be between 1 and 100, got: " + populationSize);
+                "Population size must be between 1 and " + AlgorithmConstants.MAX_POPULATION_SIZE + ", got: " + populationSize);
         }
         
-        if (maxIterations <= 0 || maxIterations > 1000) {
+        if (maxIterations <= 0 || maxIterations > AlgorithmConstants.MAX_ITERATIONS) {
             throw new IllegalArgumentException(
-                "Max iterations must be between 1 and 1000, got: " + maxIterations);
+                "Max iterations must be between 1 and " + AlgorithmConstants.MAX_ITERATIONS + ", got: " + maxIterations);
         }
         
         if (convergenceThreshold < 0.0 || convergenceThreshold > 1.0) {
@@ -279,9 +279,9 @@ public class HippopotamusParameters {
     }
     
     public void setPopulationSize(int populationSize) {
-        if (populationSize <= 0 || populationSize > 100) {
+        if (populationSize <= 0 || populationSize > AlgorithmConstants.MAX_POPULATION_SIZE) {
             throw new IllegalArgumentException(
-                "Population size must be between 1 and 100, got: " + populationSize);
+                "Population size must be between 1 and " + AlgorithmConstants.MAX_POPULATION_SIZE + ", got: " + populationSize);
         }
         this.populationSize = populationSize;
     }
@@ -291,9 +291,9 @@ public class HippopotamusParameters {
     }
     
     public void setMaxIterations(int maxIterations) {
-        if (maxIterations <= 0 || maxIterations > 1000) {
+        if (maxIterations <= 0 || maxIterations > AlgorithmConstants.MAX_ITERATIONS) {
             throw new IllegalArgumentException(
-                "Max iterations must be between 1 and 1000, got: " + maxIterations);
+                "Max iterations must be between 1 and " + AlgorithmConstants.MAX_ITERATIONS + ", got: " + maxIterations);
         }
         this.maxIterations = maxIterations;
     }

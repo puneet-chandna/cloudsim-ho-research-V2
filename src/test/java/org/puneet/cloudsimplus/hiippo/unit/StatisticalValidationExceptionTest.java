@@ -98,6 +98,6 @@ class StatisticalValidationExceptionTest {
                 StatisticalValidationException.StatisticalErrorType.DATA_QUALITY_ERROR, "Data error");
         String str = ex.toString();
         assertTrue(str.contains("StatisticalValidationException"));
-        assertTrue(str.contains("DATA_QUALITY_ERROR"));
+        assertTrue(str.contains("STAT018")); // DATA_QUALITY_ERROR code
     }
 } 

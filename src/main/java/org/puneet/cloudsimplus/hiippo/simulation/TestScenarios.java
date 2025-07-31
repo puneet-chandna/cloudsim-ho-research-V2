@@ -128,11 +128,11 @@ public class TestScenarios {
         List<Vm> vms = new ArrayList<>();
         Random random = ExperimentConfig.getRandomGenerator(0);
         
-        // Calculate VM distribution
-        int smallCount = (int) (vmCount * 0.4);
-        int mediumCount = (int) (vmCount * 0.3);
-        int largeCount = (int) (vmCount * 0.2);
-        int xlargeCount = vmCount - smallCount - mediumCount - largeCount;
+        // Calculate VM distribution - reduce XLARGE VMs for better allocation
+        int smallCount = (int) (vmCount * 0.5);   // 50% SMALL (increased from 40%)
+        int mediumCount = (int) (vmCount * 0.3);  // 30% MEDIUM (unchanged)
+        int largeCount = (int) (vmCount * 0.15);  // 15% LARGE (reduced from 20%)
+        int xlargeCount = vmCount - smallCount - mediumCount - largeCount; // 5% XLARGE (reduced from 10%)
         
         // Create VMs batch by batch to manage memory
         vms.addAll(createVmBatch(0, smallCount, VM_SMALL, random));
@@ -205,10 +205,11 @@ public class TestScenarios {
             hostType = HOST_POWERFUL;
         }
         
-        // Create hosts with some powerful ones for large scenarios
-        int powerfulCount = (int) Math.ceil(hostCount * 0.2); // 20% powerful hosts
-        int standardCount = (int) Math.ceil(hostCount * 0.5); // 50% standard hosts
-        int basicCount = hostCount - powerfulCount - standardCount; // 30% basic hosts
+        // Create hosts with better distribution for large scenarios
+        // Ensure enough powerful hosts for XLARGE VMs
+        int powerfulCount = (int) Math.ceil(hostCount * 0.4); // 40% powerful hosts (increased from 20%)
+        int standardCount = (int) Math.ceil(hostCount * 0.4); // 40% standard hosts (increased from 50%)
+        int basicCount = hostCount - powerfulCount - standardCount; // 20% basic hosts (reduced from 30%)
         
         hosts.addAll(createHostBatch(0, basicCount, HOST_BASIC));
         hosts.addAll(createHostBatch(basicCount, standardCount, HOST_STANDARD));
@@ -263,9 +264,9 @@ public class TestScenarios {
     }
     
     /**
-     * Creates cloudlets for the given VMs
+     * Creates cloudlets for VMs with realistic execution patterns
      * 
-     * @param vms List of VMs
+     * @param vms List of VMs to create cloudlets for
      * @return List of cloudlets
      */
     private static List<Cloudlet> createCloudletsForVms(List<Vm> vms) {
@@ -277,16 +278,33 @@ public class TestScenarios {
         // Create cloudlets for VMs with much longer execution time to show resource utilization
         for (int i = 0; i < vms.size(); i++) {
             Vm vm = vms.get(i);
-            // Create much longer cloudlets to show actual resource utilization
-            long length = (long) (vm.getMips() * 500000);  // Increased to 500000 for much longer execution
+            
+            // CRITICAL FIX: Create much longer cloudlets to ensure meaningful resource utilization
+            // Use a multiplier that ensures cloudlets run for a significant amount of simulation time
+            long baseLength = (long) (vm.getMips() * 10000000); // Increased to 10M for much longer execution
+            long length = baseLength + random.nextInt((int)(baseLength * 0.5)); // Add some randomness
+            
+            // Ensure minimum length to prevent instant completion
+            length = Math.max(length, 1000000); // At least 1M instructions
+            
+            // Create cloudlet with full resource utilization
             Cloudlet cloudlet = new CloudletSimple(i, length, (int) vm.getPesNumber())
-                .setFileSize(5000)  // Increased file size
-                .setOutputSize(5000) // Increased output size
-                .setUtilizationModelCpu(new UtilizationModelFull())
-                .setUtilizationModelRam(new UtilizationModelFull())
-                .setUtilizationModelBw(new UtilizationModelFull());
+                .setFileSize(10000)  // Increased file size for more realistic I/O
+                .setOutputSize(10000) // Increased output size
+                .setUtilizationModelCpu(new UtilizationModelFull())  // Use 100% CPU
+                .setUtilizationModelRam(new UtilizationModelFull())  // Use 100% RAM
+                .setUtilizationModelBw(new UtilizationModelFull());  // Use 100% bandwidth
+            
             cloudlets.add(cloudlet);
+            
+            logger.debug("Created cloudlet {} with length {} for VM {} (MIPS: {})", 
+                i, length, vm.getId(), vm.getMips());
         }
+        
+        logger.info("Created {} cloudlets with average length: {}", 
+            cloudlets.size(), 
+            cloudlets.stream().mapToLong(Cloudlet::getLength).average().orElse(0));
+        
         return cloudlets;
     }
     

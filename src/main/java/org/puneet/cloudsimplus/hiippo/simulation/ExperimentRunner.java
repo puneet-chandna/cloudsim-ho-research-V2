@@ -228,7 +228,79 @@ public class ExperimentRunner implements AutoCloseable {
         PerformanceMonitor performanceMonitor = new PerformanceMonitor();
         performanceMonitor.startMonitoring();
         
-
+        // CRITICAL FIX: Create utilization sampling mechanism
+        Map<Host, List<Double>> hostCpuUtilizationSamples = new HashMap<>();
+        Map<Host, List<Double>> hostRamUtilizationSamples = new HashMap<>();
+        
+        // Initialize sampling maps for all hosts
+        for (Host host : datacenter.getHostList()) {
+            hostCpuUtilizationSamples.put(host, new ArrayList<>());
+            hostRamUtilizationSamples.put(host, new ArrayList<>());
+        }
+        
+        // Add clock tick listener to sample utilization during simulation
+        // Use a much smaller sampling interval to ensure we capture utilization
+        double samplingInterval = 0.5; // Sample every 0.5 simulation time unit for more frequent sampling
+        simulation.addOnClockTickListener(evt -> {
+            double currentTime = simulation.clock();
+            // Sample more frequently at the beginning and then every few time units
+            if (currentTime > 0 && (currentTime <= 100 || currentTime % samplingInterval == 0)) {
+                for (Host host : datacenter.getHostList()) {
+                    // Sample CPU utilization (calculate manually to ensure decimal form)
+                    double totalMips = host.getTotalMipsCapacity();
+                    double allocatedMips = host.getTotalAllocatedMips();
+                    double cpuUtil = totalMips > 0 ? allocatedMips / totalMips : 0.0;
+                    // Ensure the value is in decimal form (0-1), not percentage
+                    cpuUtil = Math.min(1.0, Math.max(0.0, cpuUtil));
+                    hostCpuUtilizationSamples.get(host).add(cpuUtil);
+                    
+                    // Sample RAM utilization (calculate manually and ensure it's in decimal form)
+                    double totalRam = host.getRam().getCapacity();
+                    double allocatedRam = host.getRam().getAllocatedResource();
+                    double ramUtil = totalRam > 0 ? allocatedRam / totalRam : 0.0;
+                    // Ensure the value is in decimal form (0-1), not percentage
+                    ramUtil = Math.min(1.0, Math.max(0.0, ramUtil));
+                    hostRamUtilizationSamples.get(host).add(ramUtil);
+                }
+                
+                // Log detailed utilization information every 100 time units (less frequently)
+                if (currentTime % 100 == 0) {
+                    double totalCpuUtil = 0.0;
+                    double totalRamUtil = 0.0;
+                    int activeHosts = 0;
+                    
+                    for (Host host : datacenter.getHostList()) {
+                        double totalMips = host.getTotalMipsCapacity();
+                        double allocatedMips = host.getTotalAllocatedMips();
+                        double totalRam = host.getRam().getCapacity();
+                        double allocatedRam = host.getRam().getAllocatedResource();
+                        
+                        if (totalMips > 0) {
+                            double cpuUtil = allocatedMips / totalMips;
+                            double ramUtil = totalRam > 0 ? allocatedRam / totalRam : 0.0;
+                            totalCpuUtil += cpuUtil;
+                            totalRamUtil += ramUtil;
+                            activeHosts++;
+                            
+                            logger.debug("Host {} at time {}: CPU={:.2f}%, RAM={:.2f}%, VMs={}", 
+                                host.getId(), currentTime, cpuUtil * 100, ramUtil * 100, host.getVmList().size());
+                        }
+                    }
+                    
+                    if (activeHosts > 0) {
+                        logger.debug("Average utilization at time {}: CPU={:.2f}%, RAM={:.2f}%, Active hosts: {}", 
+                            currentTime, (totalCpuUtil / activeHosts) * 100, (totalRamUtil / activeHosts) * 100, activeHosts);
+                    }
+                }
+                
+                // Log sampling progress less frequently
+                if (currentTime % 100 == 0) {
+                    logger.debug("Sampled utilization at time {} - CPU samples: {}, RAM samples: {}", 
+                        currentTime, hostCpuUtilizationSamples.values().stream().mapToInt(List::size).sum(),
+                        hostRamUtilizationSamples.values().stream().mapToInt(List::size).sum());
+                }
+            }
+        });
         
         // Run simulation with progress tracking
         Future<?> progressTask = runSimulationWithProgress(simulation, experimentId, startTime);
@@ -237,25 +309,131 @@ public class ExperimentRunner implements AutoCloseable {
             // Start simulation
             simulation.start();
             
-            // Wait for simulation to run for a reasonable time to show resource utilization
-            // We need to wait for cloudlets to start executing and show utilization
+            // CRITICAL FIX: Wait for cloudlets to actually start executing and show utilization
+            // We need to wait for a reasonable amount of simulation time
             double simulationTime = simulation.clock();
             logger.debug("Simulation started, current time: {}", simulationTime);
             
-            // Wait for a minimum simulation time to allow cloudlets to execute
-            // This ensures we capture resource utilization during execution
-            double targetSimulationTime = 5000.0; // Increased to 5000 time units for much longer execution
+            // Wait for cloudlets to be assigned to VMs and start executing
+            double targetSimulationTime = 50.0; // Wait for 50 time units for cloudlets to start
+            long startWaitTime = System.currentTimeMillis();
+            long maxWaitTime = 30000; // 30 seconds max wait
+            
             while (simulation.isRunning() && simulation.clock() < targetSimulationTime) {
-                Thread.sleep(10); // Small delay to avoid busy waiting
+                Thread.sleep(50); // Small delay to avoid busy waiting
+                
+                // Debug: Log simulation progress (less frequently)
+                double currentTime = simulation.clock();
+                if (currentTime % 50 == 0) {
+                    logger.debug("Simulation time: {}, running: {}", currentTime, simulation.isRunning());
+                }
+                
+                // Check if we've been waiting too long
+                if (System.currentTimeMillis() - startWaitTime > maxWaitTime) {
+                    logger.warn("Simulation taking too long to reach target time, proceeding anyway");
+                    break;
+                }
             }
             
-            // Additional wait to ensure cloudlets have time to show utilization
-            if (simulation.isRunning()) {
-                Thread.sleep(500); // Wait 500ms more for utilization to stabilize
+            // Now wait for cloudlets to execute and show meaningful utilization
+            // We want to capture utilization while cloudlets are actively running
+            double executionTime = 500.0; // Let cloudlets run for 500 more time units to ensure meaningful utilization
+            double finalTargetTime = simulation.clock() + executionTime;
+            
+            logger.info("Starting utilization sampling phase. Current time: {}, target: {}", 
+                simulation.clock(), finalTargetTime);
+            
+            while (simulation.isRunning() && simulation.clock() < finalTargetTime) {
+                Thread.sleep(100); // Check every 100ms
+                
+                            // Debug: Log simulation progress during utilization phase (less frequently)
+            double currentTime = simulation.clock();
+            if (currentTime % 100 == 0) {
+                // Check cloudlet execution status during simulation
+                List<Cloudlet> submittedCloudlets = broker.getCloudletSubmittedList();
+                long runningCloudlets = submittedCloudlets.stream()
+                    .filter(c -> c.getStatus() == Cloudlet.Status.INEXEC)
+                    .count();
+                long finishedCloudlets = submittedCloudlets.stream()
+                    .filter(c -> c.getStatus() == Cloudlet.Status.SUCCESS)
+                    .count();
+                
+                logger.debug("Utilization sampling phase - time: {}, running: {}, cloudlets: {}/{} running, {} finished", 
+                    currentTime, simulation.isRunning(), runningCloudlets, submittedCloudlets.size(), finishedCloudlets);
+            }
+                
+                // Check if we've been waiting too long
+                if (System.currentTimeMillis() - startWaitTime > maxWaitTime) {
+                    logger.warn("Simulation taking too long, proceeding with current samples");
+                    break;
+                }
             }
             
             // Wait for progress task to complete
             cancelProgressTask(progressTask);
+            
+            // Log utilization sampling results
+            int totalCpuSamples = hostCpuUtilizationSamples.values().stream().mapToInt(List::size).sum();
+            int totalRamSamples = hostRamUtilizationSamples.values().stream().mapToInt(List::size).sum();
+            logger.info("Utilization sampling completed - CPU samples: {}, RAM samples: {}", 
+                totalCpuSamples, totalRamSamples);
+            
+            // CRITICAL DEBUG: Check cloudlet status to understand why utilization might be 0
+            List<Cloudlet> finishedCloudlets = broker.getCloudletFinishedList();
+            List<Cloudlet> submittedCloudlets = broker.getCloudletSubmittedList();
+            logger.info("Cloudlet Status - Submitted: {}, Finished: {}, Remaining: {}", 
+                submittedCloudlets.size(), finishedCloudlets.size(), 
+                submittedCloudlets.size() - finishedCloudlets.size());
+            
+            // Check if any cloudlets are still running
+            long runningCloudlets = submittedCloudlets.stream()
+                .filter(c -> c.getStatus() == Cloudlet.Status.INEXEC)
+                .count();
+            logger.info("Running cloudlets: {}", runningCloudlets);
+            
+            // Log some cloudlet details for debugging
+            if (!finishedCloudlets.isEmpty()) {
+                Cloudlet sampleCloudlet = finishedCloudlets.get(0);
+                logger.info("Sample finished cloudlet - ID: {}, Length: {}, Finish time: {}", 
+                    sampleCloudlet.getId(), sampleCloudlet.getLength(), 
+                    sampleCloudlet.getFinishTime());
+            }
+            
+            // CRITICAL FIX: If no samples were collected, manually sample utilization at the end
+            if (totalCpuSamples == 0 || totalRamSamples == 0) {
+                logger.warn("No utilization samples collected via clock tick listener, performing manual sampling");
+                
+                // Manually sample utilization from all hosts
+                for (Host host : datacenter.getHostList()) {
+                    // Sample CPU utilization (calculate manually to ensure decimal form)
+                    double totalMips = host.getTotalMipsCapacity();
+                    double allocatedMips = host.getTotalAllocatedMips();
+                    double cpuUtil = totalMips > 0 ? allocatedMips / totalMips : 0.0;
+                    // Ensure the value is in decimal form (0-1), not percentage
+                    cpuUtil = Math.min(1.0, Math.max(0.0, cpuUtil));
+                    hostCpuUtilizationSamples.get(host).add(cpuUtil);
+                    
+                    // Sample RAM utilization (calculate manually and ensure it's in decimal form)
+                    double totalRam = host.getRam().getCapacity();
+                    double allocatedRam = host.getRam().getAllocatedResource();
+                    double ramUtil = totalRam > 0 ? allocatedRam / totalRam : 0.0;
+                    // Ensure the value is in decimal form (0-1), not percentage
+                    ramUtil = Math.min(1.0, Math.max(0.0, ramUtil));
+                    hostRamUtilizationSamples.get(host).add(ramUtil);
+                    
+                    logger.debug("Manual sampling - Host {}: CPU={:.2f}%, RAM={:.2f}%", 
+                        host.getId(), cpuUtil * 100, ramUtil * 100);
+                }
+                
+                totalCpuSamples = hostCpuUtilizationSamples.values().stream().mapToInt(List::size).sum();
+                totalRamSamples = hostRamUtilizationSamples.values().stream().mapToInt(List::size).sum();
+                logger.info("Manual sampling completed - CPU samples: {}, RAM samples: {}", 
+                    totalCpuSamples, totalRamSamples);
+            }
+            
+            // Debug: Log final simulation state
+            logger.info("Final simulation state - time: {}, running: {}", 
+                simulation.clock(), simulation.isRunning());
             
         } catch (Exception e) {
             cancelProgressTask(progressTask);
@@ -265,9 +443,10 @@ public class ExperimentRunner implements AutoCloseable {
         // Stop monitoring
         PerformanceMetrics performanceMetrics = performanceMonitor.stopMonitoring();
         
-        // Collect metrics after simulation has run for a while to show resource utilization
+        // CRITICAL FIX: Pass utilization samples to metrics collection
         Map<String, Double> metrics = collectExperimentMetrics(
-            simulation, broker, datacenter, metricsCollector, performanceMetrics);
+            simulation, broker, datacenter, metricsCollector, performanceMetrics,
+            hostCpuUtilizationSamples, hostRamUtilizationSamples);
         
         // Calculate execution time
         Duration executionTime = Duration.between(startTime, Instant.now());
@@ -331,16 +510,15 @@ public class ExperimentRunner implements AutoCloseable {
         
         Future<?> task = progressExecutor.submit(() -> {
             try {
-                ProgressTracker progressTracker = new ProgressTracker();
                 long lastProgressTime = System.currentTimeMillis();
                 double lastSimulationTime = 0.0;
                 
                 while (simulation.isRunning() && 
                        !Thread.currentThread().isInterrupted()) {
                     
-                    // Only update progress every 2 seconds to avoid spam
+                    // Only update progress every 5 seconds to avoid spam
                     long currentTime = System.currentTimeMillis();
-                    if (currentTime - lastProgressTime < 2000) {
+                    if (currentTime - lastProgressTime < 5000) {
                         Thread.sleep(100);
                         continue;
                     }
@@ -348,12 +526,12 @@ public class ExperimentRunner implements AutoCloseable {
                     double currentSimulationTime = simulation.clock();
                     
                     // Calculate meaningful progress based on simulation time
-                    // Target simulation time is 5000.0, so progress is current/target
-                    int progress = (int) Math.min(100, (currentSimulationTime / 5000.0) * 100);
+                    // Target simulation time is 550.0 (50 + 500), so progress is current/target
+                    int progress = (int) Math.min(100, (currentSimulationTime / 550.0) * 100);
                     
                     // Only log if there's actual progress or significant time has passed
-                    if (progress > 0 || currentSimulationTime > lastSimulationTime + 100) {
-                        progressTracker.reportProgress("Simulation " + experimentId, progress, 100);
+                    if (progress > 0 || currentSimulationTime > lastSimulationTime + 50) {
+                        logger.debug("Simulation {} progress: {}% (time: {})", experimentId, progress, currentSimulationTime);
                         lastSimulationTime = currentSimulationTime;
                     }
                     
@@ -369,7 +547,7 @@ public class ExperimentRunner implements AutoCloseable {
                     Thread.sleep(100);
                 }
                 
-                progressTracker.reportProgress("Simulation " + experimentId, 100, 100);
+                logger.debug("Simulation {} completed", experimentId);
                 progressFuture.complete(null);
                 
             } catch (InterruptedException e) {
@@ -591,7 +769,8 @@ public class ExperimentRunner implements AutoCloseable {
             if (policy instanceof BaselineVmAllocationPolicy) {
                 BaselineVmAllocationPolicy baselinePolicy = (BaselineVmAllocationPolicy) policy;
                 baselinePolicy.setHostList(hosts);
-                logger.debug("Set {} hosts in baseline allocation policy", hosts.size());
+                baselinePolicy.setDetailedLogging(true); // Enable detailed logging
+                logger.debug("Set {} hosts in baseline allocation policy with detailed logging", hosts.size());
             }
             
             // CRITICAL FIX: For BestFit specifically, ensure proper host setup
@@ -613,42 +792,65 @@ public class ExperimentRunner implements AutoCloseable {
                                                               DatacenterBroker broker,
                                                               DatacenterSimple datacenter,
                                                               MetricsCollector collector,
-                                                              PerformanceMetrics performance) {
+                                                              PerformanceMetrics performance,
+                                                              Map<Host, List<Double>> hostCpuUtilizationSamples,
+                                                              Map<Host, List<Double>> hostRamUtilizationSamples) {
         Map<String, Double> metrics = new HashMap<>();
         
         try {
-            // CRITICAL FIX: Calculate resource utilization properly
+            // CRITICAL FIX: Calculate resource utilization from sampled data during simulation
             double cpuUtilization = 0.0;
             double ramUtilization = 0.0;
             int activeHosts = 0;
+            int totalCpuSamples = 0;
+            int totalRamSamples = 0;
             
+            // Calculate average utilization from all samples collected during simulation
             for (Host host : datacenter.getHostList()) {
-                // Calculate CPU utilization based on allocated vs total MIPS
-                double totalMips = host.getTotalMipsCapacity();
-                double allocatedMips = host.getTotalAllocatedMips();
+                List<Double> cpuSamples = hostCpuUtilizationSamples.get(host);
+                List<Double> ramSamples = hostRamUtilizationSamples.get(host);
                 
-                if (totalMips > 0) {
-                    double hostCpuUtil = allocatedMips / totalMips;
-                    cpuUtilization += hostCpuUtil;
+                if (cpuSamples != null && !cpuSamples.isEmpty()) {
+                    double hostAvgCpuUtil = cpuSamples.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+                    cpuUtilization += hostAvgCpuUtil;
+                    totalCpuSamples += cpuSamples.size();
                     activeHosts++;
+                    
+                    logger.debug("Host {} CPU utilization samples: {} (avg: {:.2f}%)", 
+                        host.getId(), cpuSamples.size(), hostAvgCpuUtil * 100);
                 }
                 
-                // Calculate RAM utilization based on allocated vs total RAM
-                double totalRam = host.getRam().getCapacity();
-                double allocatedRam = host.getRam().getAllocatedResource();
-                
-                if (totalRam > 0) {
-                    double hostRamUtil = allocatedRam / totalRam;
-                    ramUtilization += hostRamUtil;
+                if (ramSamples != null && !ramSamples.isEmpty()) {
+                    double hostAvgRamUtil = ramSamples.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+                    ramUtilization += hostAvgRamUtil;
+                    totalRamSamples += ramSamples.size();
+                    
+                    logger.debug("Host {} RAM utilization samples: {} (avg: {:.2f}%)", 
+                        host.getId(), ramSamples.size(), hostAvgRamUtil * 100);
                 }
             }
             
-            // Calculate averages
+            // Calculate overall averages
             cpuUtilization = activeHosts > 0 ? cpuUtilization / activeHosts : 0.0;
             ramUtilization = activeHosts > 0 ? ramUtilization / activeHosts : 0.0;
             
-            logger.info("Resource Utilization - CPU: {:.2f}%, RAM: {:.2f}%, Active Hosts: {}", 
-                cpuUtilization * 100, ramUtilization * 100, activeHosts);
+            logger.info("Resource Utilization Analysis:");
+            logger.info("  Active Hosts: {}", activeHosts);
+            logger.info("  Total CPU Samples: {}", totalCpuSamples);
+            logger.info("  Total RAM Samples: {}", totalRamSamples);
+            logger.info("  Average CPU Utilization: {:.2f}%", cpuUtilization * 100);
+            logger.info("  Average RAM Utilization: {:.2f}%", ramUtilization * 100);
+            
+            // If no samples were collected, fall back to end-of-simulation calculation
+            if (totalCpuSamples == 0) {
+                logger.warn("No CPU utilization samples collected, using fallback calculation");
+                cpuUtilization = calculateFallbackCpuUtilization(datacenter);
+            }
+            
+            if (totalRamSamples == 0) {
+                logger.warn("No RAM utilization samples collected, using fallback calculation");
+                ramUtilization = calculateFallbackRamUtilization(datacenter);
+            }
             
             metrics.put("cpuUtilization", cpuUtilization);
             metrics.put("ramUtilization", ramUtilization);
@@ -706,6 +908,68 @@ public class ExperimentRunner implements AutoCloseable {
         
         return metrics;
     }
+    
+    /**
+     * Fallback method to calculate CPU utilization when no samples are available.
+     */
+    private static double calculateFallbackCpuUtilization(DatacenterSimple datacenter) {
+        double totalUtilization = 0.0;
+        int activeHosts = 0;
+        
+        logger.info("Calculating fallback CPU utilization for {} hosts", datacenter.getHostList().size());
+        
+        for (Host host : datacenter.getHostList()) {
+            double totalMips = host.getTotalMipsCapacity();
+            double allocatedMips = host.getTotalAllocatedMips();
+            
+            logger.debug("Host {}: Total MIPS: {}, Allocated MIPS: {}, VMs: {}", 
+                host.getId(), totalMips, allocatedMips, host.getVmList().size());
+            
+            if (totalMips > 0) {
+                double hostUtil = allocatedMips / totalMips;
+                totalUtilization += hostUtil;
+                activeHosts++;
+                
+                logger.debug("Host {} CPU utilization: {:.2f}%", host.getId(), hostUtil * 100);
+            }
+        }
+        
+        double avgUtil = activeHosts > 0 ? totalUtilization / activeHosts : 0.0;
+        logger.info("Fallback CPU utilization: {:.2f}% (from {} active hosts)", avgUtil * 100, activeHosts);
+        
+        return avgUtil;
+    }
+    
+    /**
+     * Fallback method to calculate RAM utilization when no samples are available.
+     */
+    private static double calculateFallbackRamUtilization(DatacenterSimple datacenter) {
+        double totalUtilization = 0.0;
+        int activeHosts = 0;
+        
+        logger.info("Calculating fallback RAM utilization for {} hosts", datacenter.getHostList().size());
+        
+        for (Host host : datacenter.getHostList()) {
+            double totalRam = host.getRam().getCapacity();
+            double allocatedRam = host.getRam().getAllocatedResource();
+            
+            logger.debug("Host {}: Total RAM: {}, Allocated RAM: {}, VMs: {}", 
+                host.getId(), totalRam, allocatedRam, host.getVmList().size());
+            
+            if (totalRam > 0) {
+                double hostUtil = allocatedRam / totalRam;
+                totalUtilization += hostUtil;
+                activeHosts++;
+                
+                logger.debug("Host {} RAM utilization: {:.2f}%", host.getId(), hostUtil * 100);
+            }
+        }
+        
+        double avgUtil = activeHosts > 0 ? totalUtilization / activeHosts : 0.0;
+        logger.info("Fallback RAM utilization: {:.2f}% (from {} active hosts)", avgUtil * 100, activeHosts);
+        
+        return avgUtil;
+    }
 
     private static ExperimentResult createExperimentResult(String algorithmName,
                                                          String scenarioName,
@@ -723,9 +987,9 @@ public class ExperimentRunner implements AutoCloseable {
         result.setReplication(replication);
         result.setTimestamp(Instant.now());
         
-        // Metrics - convert to percentages for display
-        result.setResourceUtilizationCPU(metrics.getOrDefault("cpuUtilization", 0.0) * 100.0);
-        result.setResourceUtilizationRAM(metrics.getOrDefault("ramUtilization", 0.0) * 100.0);
+        // Metrics - store as decimal values (0-1) for validation, but display as percentages
+        result.setResourceUtilizationCPU(metrics.getOrDefault("cpuUtilization", 0.0));
+        result.setResourceUtilizationRAM(metrics.getOrDefault("ramUtilization", 0.0));
         result.setPowerConsumption(metrics.getOrDefault("powerConsumption", 0.0));
         result.setSlaViolations(metrics.getOrDefault("slaViolations", 0.0).intValue());
         result.setExecutionTime(executionTime.toMillis() / 1000.0); // Convert to seconds

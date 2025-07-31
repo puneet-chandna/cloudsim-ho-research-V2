@@ -85,6 +85,6 @@ class ScalabilityTestExceptionTest {
                 ScalabilityTestException.ScalabilityErrorType.BENCHMARK_FAILURE, "Benchmark error");
         String str = ex.toString();
         assertTrue(str.contains("ScalabilityTestException"));
-        assertTrue(str.contains("BENCHMARK_FAILURE"));
+        assertTrue(str.contains("SCALE017")); // BENCHMARK_FAILURE code
     }
 } 

@@ -434,7 +434,7 @@ public class CloudSimHOSimulation {
         broker.setName("HOBroker_" + algorithmName + "_" + replicationNumber);
         
         // Configure broker behavior
-        broker.setVmDestructionDelay(0.0); // No delay for research experiments
+        broker.setVmDestructionDelay(1.0); // Increased delay for research experiments
         // Remove or comment out broker.setFailedVmsRetryDelay(0.0); if not supported
     }
     

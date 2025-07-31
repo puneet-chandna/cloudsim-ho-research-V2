@@ -120,7 +120,7 @@ public class ScalabilityTester {
             
             // Run actual scalability tests
             for (int i = 0; i < VM_COUNTS.length; i++) {
-                progressTracker.reportProgress("Scalability Test", i + 1, VM_COUNTS.length);
+                logger.debug("Scalability test progress: {}/{} VM counts tested", i + 1, VM_COUNTS.length);
                 int vmCount = VM_COUNTS[i];
                 int hostCount = HOST_COUNTS[i];
                 

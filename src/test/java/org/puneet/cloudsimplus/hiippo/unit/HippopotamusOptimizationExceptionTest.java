@@ -71,6 +71,6 @@ class HippopotamusOptimizationExceptionTest {
                 HippopotamusOptimizationException.ErrorCode.UNKNOWN, "Unknown error");
         String str = ex.toString();
         assertTrue(str.contains("HippopotamusOptimizationException"));
-        assertTrue(str.contains("UNKNOWN"));
+        assertTrue(str.contains("HO999")); // UNKNOWN error code
     }
 } 

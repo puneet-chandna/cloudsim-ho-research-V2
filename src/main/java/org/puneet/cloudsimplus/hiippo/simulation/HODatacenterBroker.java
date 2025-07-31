@@ -178,7 +178,7 @@ public class HODatacenterBroker extends DatacenterBrokerSimple {
             
             // Update progress
             int processed = successfulAllocations.get() + failedAllocations.get();
-            progressTracker.reportProgress("VM Submission", processed, vmList.size());
+            logger.debug("VM Submission progress: {}/{} VMs processed", processed, vmList.size());
             
             // Small delay between batches to avoid overwhelming the system
             try {

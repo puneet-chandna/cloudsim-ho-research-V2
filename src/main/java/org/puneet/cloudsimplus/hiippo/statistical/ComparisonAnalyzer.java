@@ -823,9 +823,215 @@ public class ComparisonAnalyzer {
     public void generateComparisonData(Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) {
         logger.info("Generating comparison data for {} algorithms", allResults.size());
         
-        // This method would generate comparison data files
-        // Implementation similar to analyzeAllResults but focused on data generation
-        analyzeAllResults(allResults);
+        try {
+            // Generate pairwise comparison data
+            generatePairwiseComparisons(allResults);
+            
+            // Generate algorithm ranking data
+            generateAlgorithmRankings(allResults);
+            
+            // Generate performance comparison summary
+            generatePerformanceComparisonSummary(allResults);
+            
+            logger.info("Comparison data generation completed successfully");
+            
+        } catch (Exception e) {
+            logger.error("Failed to generate comparison data", e);
+        }
+    }
+    
+    /**
+     * Generates pairwise comparison data between algorithms.
+     */
+    private void generatePairwiseComparisons(Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) {
+        logger.info("Generating pairwise comparisons...");
+        
+        try {
+            Path comparisonDir = Paths.get(COMPARISON_OUTPUT_DIR);
+            Files.createDirectories(comparisonDir);
+            
+            Path pairwiseFile = comparisonDir.resolve("pairwise_comparisons.csv");
+            
+            try (BufferedWriter writer = Files.newBufferedWriter(pairwiseFile)) {
+                // Write header
+                writer.write("Algorithm1,Algorithm2,Scenario,Metric,Mean1,Mean2,Difference,PercentageDiff,BetterAlgorithm\n");
+                
+                List<String> algorithms = Arrays.asList("HO", "FirstFit", "GA");
+                List<String> metrics = Arrays.asList("ResourceUtilCPU", "ResourceUtilRAM", "PowerConsumption", "ExecutionTime");
+                List<String> scenarios = Arrays.asList("Micro", "Small", "Medium", "Large", "XLarge", "Enterprise");
+                
+                for (int i = 0; i < algorithms.size(); i++) {
+                    for (int j = i + 1; j < algorithms.size(); j++) {
+                        String alg1 = algorithms.get(i);
+                        String alg2 = algorithms.get(j);
+                        
+                        for (String scenario : scenarios) {
+                            for (String metric : metrics) {
+                                String key1 = alg1 + "_" + scenario;
+                                String key2 = alg2 + "_" + scenario;
+                                
+                                if (allResults.containsKey(key1) && allResults.containsKey(key2)) {
+                                    double mean1 = calculateMean(allResults.get(key1), metric);
+                                    double mean2 = calculateMean(allResults.get(key2), metric);
+                                    
+                                    double difference = mean1 - mean2;
+                                    double percentageDiff = mean2 != 0 ? (difference / mean2) * 100 : 0;
+                                    String betterAlg = isAlgorithm1Better(metric, mean1, mean2) ? alg1 : alg2;
+                                    
+                                    writer.write(String.format("%s,%s,%s,%s,%.4f,%.4f,%.4f,%.2f,%s\n",
+                                        alg1, alg2, scenario, metric, mean1, mean2, difference, percentageDiff, betterAlg));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            logger.info("Pairwise comparisons written to: {}", pairwiseFile);
+            
+        } catch (IOException e) {
+            logger.error("Failed to write pairwise comparisons", e);
+        }
+    }
+    
+    /**
+     * Generates algorithm ranking data.
+     */
+    private void generateAlgorithmRankings(Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) {
+        logger.info("Generating algorithm rankings...");
+        
+        try {
+            Path comparisonDir = Paths.get(COMPARISON_OUTPUT_DIR);
+            Files.createDirectories(comparisonDir);
+            
+            Path rankingFile = comparisonDir.resolve("algorithm_rankings.csv");
+            
+            try (BufferedWriter writer = Files.newBufferedWriter(rankingFile)) {
+                // Write header
+                writer.write("Scenario,Metric,Algorithm,Rank,Score,Percentage\n");
+                
+                List<String> algorithms = Arrays.asList("HO", "FirstFit", "GA");
+                List<String> metrics = Arrays.asList("ResourceUtilCPU", "ResourceUtilRAM", "PowerConsumption", "ExecutionTime");
+                List<String> scenarios = Arrays.asList("Micro", "Small", "Medium", "Large", "XLarge", "Enterprise");
+                
+                for (String scenario : scenarios) {
+                    for (String metric : metrics) {
+                        Map<String, Double> algorithmScores = new HashMap<>();
+                        
+                        for (String algorithm : algorithms) {
+                            String key = algorithm + "_" + scenario;
+                            if (allResults.containsKey(key)) {
+                                double score = calculateMean(allResults.get(key), metric);
+                                algorithmScores.put(algorithm, score);
+                            }
+                        }
+                        
+                        if (!algorithmScores.isEmpty()) {
+                            // Sort algorithms by score (higher is better for utilization, lower is better for others)
+                            List<Map.Entry<String, Double>> sortedScores = new ArrayList<>(algorithmScores.entrySet());
+                            if (metric.equals("ResourceUtilCPU") || metric.equals("ResourceUtilRAM")) {
+                                sortedScores.sort((a, b) -> Double.compare(b.getValue(), a.getValue())); // Higher is better
+                            } else {
+                                sortedScores.sort((a, b) -> Double.compare(a.getValue(), b.getValue())); // Lower is better
+                            }
+                            
+                            double maxScore = sortedScores.get(0).getValue();
+                            double minScore = sortedScores.get(sortedScores.size() - 1).getValue();
+                            double range = maxScore - minScore;
+                            
+                            for (int i = 0; i < sortedScores.size(); i++) {
+                                Map.Entry<String, Double> entry = sortedScores.get(i);
+                                String algorithm = entry.getKey();
+                                double score = entry.getValue();
+                                int rank = i + 1;
+                                double percentage = range != 0 ? ((score - minScore) / range) * 100 : 100.0;
+                                
+                                writer.write(String.format("%s,%s,%s,%d,%.4f,%.2f\n",
+                                    scenario, metric, algorithm, rank, score, percentage));
+                            }
+                        }
+                    }
+                }
+            }
+            
+            logger.info("Algorithm rankings written to: {}", rankingFile);
+            
+        } catch (IOException e) {
+            logger.error("Failed to write algorithm rankings", e);
+        }
+    }
+    
+    /**
+     * Generates performance comparison summary.
+     */
+    private void generatePerformanceComparisonSummary(Map<String, List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult>> allResults) {
+        logger.info("Generating performance comparison summary...");
+        
+        try {
+            Path comparisonDir = Paths.get(COMPARISON_OUTPUT_DIR);
+            Files.createDirectories(comparisonDir);
+            
+            Path summaryFile = comparisonDir.resolve("performance_summary.csv");
+            
+            try (BufferedWriter writer = Files.newBufferedWriter(summaryFile)) {
+                // Write header
+                writer.write("Algorithm,Scenario,AvgCPUUtil,AvgRAMUtil,AvgPower,AvgExecTime,TotalVMs,SuccessRate\n");
+                
+                List<String> algorithms = Arrays.asList("HO", "FirstFit", "GA");
+                List<String> scenarios = Arrays.asList("Micro", "Small", "Medium", "Large", "XLarge", "Enterprise");
+                
+                for (String algorithm : algorithms) {
+                    for (String scenario : scenarios) {
+                        String key = algorithm + "_" + scenario;
+                        
+                        if (allResults.containsKey(key)) {
+                            List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult> results = allResults.get(key);
+                            
+                            double avgCPU = calculateMean(results, "ResourceUtilCPU");
+                            double avgRAM = calculateMean(results, "ResourceUtilRAM");
+                            double avgPower = calculateMean(results, "PowerConsumption");
+                            double avgExecTime = calculateMean(results, "ExecutionTime");
+                            
+                            int totalVMs = results.stream()
+                                .mapToInt(r -> (int) r.getVmTotal())
+                                .findFirst()
+                                .orElse(0);
+                            
+                            double successRate = results.stream()
+                                .mapToDouble(r -> r.getVmTotal() > 0 ? (double) r.getVmAllocated() / r.getVmTotal() : 0.0)
+                                .average()
+                                .orElse(0.0) * 100;
+                            
+                            writer.write(String.format("%s,%s,%.4f,%.4f,%.2f,%.4f,%d,%.2f\n",
+                                algorithm, scenario, avgCPU, avgRAM, avgPower, avgExecTime, totalVMs, successRate));
+                        }
+                    }
+                }
+            }
+            
+            logger.info("Performance summary written to: {}", summaryFile);
+            
+        } catch (IOException e) {
+            logger.error("Failed to write performance summary", e);
+        }
+    }
+    
+    /**
+     * Calculates mean value for a specific metric from experiment results.
+     */
+    private double calculateMean(List<org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult> results, String metric) {
+        return results.stream()
+            .mapToDouble(result -> {
+                switch (metric) {
+                    case "ResourceUtilCPU": return result.getResourceUtilizationCPU();
+                    case "ResourceUtilRAM": return result.getResourceUtilizationRAM();
+                    case "PowerConsumption": return result.getPowerConsumption();
+                    case "ExecutionTime": return result.getExecutionTime();
+                    default: return 0.0;
+                }
+            })
+            .average()
+            .orElse(0.0);
     }
     
     /**
