@@ -472,7 +472,6 @@ public class ExperimentCoordinator {
         
         try {
             // Generate summary statistics
-            // TODO: Re-enable once memory optimization is complete
             if (ExperimentConfig.ENABLE_REPORT_GENERATION) {
                 CSVResultsWriter.writeSummaryStatistics(allResults);
             }
@@ -748,7 +747,6 @@ public class ExperimentCoordinator {
                 }
                 
                 if (!algorithmResults.isEmpty()) {
-                    // TODO: Re-enable once memory optimization is complete
                     if (ExperimentConfig.ENABLE_REPORT_GENERATION) {
                         // Convert ScenarioSpec to Object for compatibility
                         Map<String, Object> scenarioSpecsObject = new HashMap<>();

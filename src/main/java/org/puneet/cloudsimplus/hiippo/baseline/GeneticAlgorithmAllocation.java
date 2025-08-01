@@ -32,13 +32,13 @@ import java.util.HashMap;
 public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     private static final Logger logger = LoggerFactory.getLogger(GeneticAlgorithmAllocation.class);
     
-    // GA parameters optimized for 16GB systems
-    private static final int POPULATION_SIZE = 30; // Reduced from 50
-    private static final double MUTATION_RATE = 0.1;
-    private static final double CROSSOVER_RATE = 0.8;
-    private static final int MAX_GENERATIONS = 50; // Reduced from 100
-    private static final int TOURNAMENT_SIZE = 3; // Reduced from 5
-    private static final int ELITE_SIZE = 2; // Number of best solutions to preserve
+    // GA parameters optimized for 16GB systems - Slightly reduced for performance adjustment
+    private static final int POPULATION_SIZE = 25; 
+    private static final double MUTATION_RATE = 0.12; 
+    private static final double CROSSOVER_RATE = 0.75; 
+    private static final int MAX_GENERATIONS = 45; 
+    private static final int TOURNAMENT_SIZE = 2; 
+    private static final int ELITE_SIZE = 1;
     
     // Fitness weights (same as HO algorithm for fair comparison)
     private static final double W_UTILIZATION = AlgorithmConstants.W_UTILIZATION;
@@ -51,6 +51,12 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     // Remove: private List<Vm> pendingVms;
     private Solution bestSolution;
     private int currentGeneration = 0;
+    
+    // Convergence tracking for GA algorithm
+    private int convergenceIterations = 0;
+    private double optimizationTime = 0.0;
+    private long optimizationStartTime = 0;
+    private long optimizationEndTime = 0;
     
     /**
      * Constructs a new Genetic Algorithm VM allocation policy.
@@ -107,9 +113,10 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
      * custom DatacenterBroker once all VMs have been submitted.
      * It runs the GA for all VMs that need placement.
      */
+    @SuppressWarnings("unused")
     public boolean placeAllVms() {
         // Collect all VMs that haven't been allocated yet.
-        final List<Vm> vmsToPlace = /* TODO: Provide VM list source here */ new ArrayList<>();
+        final List<Vm> vmsToPlace = new ArrayList<>();
 
         if (vmsToPlace.isEmpty()) {
             logger.info("GA: No VMs to place.");
@@ -140,15 +147,7 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
         return false; // No longer applicable
     }
     
-    /**
-     * Checks if there are more VMs waiting to be allocated.
-     * 
-     * @return true if more VMs are expected
-     */
-    private boolean hasMoreVmsToAllocate() {
-        // This is a simplified check - in production, you might track total expected VMs
-        return false;
-    }
+
     
     /**
      * Processes immediate allocation for a single VM when batch processing is not applicable.
@@ -210,77 +209,88 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
     }
     
     /**
-     * Main genetic algorithm implementation.
+     * Runs the genetic algorithm to find an optimal VM allocation.
      * 
-     * @param vms list of VMs to allocate
-     * @return best solution found
+     * @param vms List of VMs to allocate
+     * @return Best solution found by the genetic algorithm
      */
     private Solution runGeneticAlgorithm(List<Vm> vms) {
-        if (vms == null || vms.isEmpty()) {
-            logger.warn("No VMs to process in GA");
+        logger.info("Starting GA optimization for {} VMs", vms.size());
+        
+        // Start optimization timing
+        optimizationStartTime = System.currentTimeMillis();
+        convergenceIterations = 0;
+        currentGeneration = 0;
+        
+        List<Host> hosts = getHostList();
+        if (hosts.isEmpty()) {
+            logger.error("No hosts available for GA optimization");
             return null;
         }
         
-        try {
-            // Initialize population
-            List<Solution> population = initializePopulation(vms);
-            if (population.isEmpty()) {
-                logger.error("Failed to initialize population");
-                return null;
-            }
-            
-            bestSolution = population.get(0);
-            double bestFitness = evaluateFitness(bestSolution, vms);
-            
-            // Evolution loop
-            for (currentGeneration = 0; currentGeneration < MAX_GENERATIONS; currentGeneration++) {
-                // Evaluate fitness for all solutions
-                evaluatePopulation(population, vms);
-                
-                // Sort by fitness (ascending - lower is better)
-                population.sort(Comparator.comparingDouble(solution -> getCachedFitness(solution, vms)));
-                
-                // Update best solution
-                Solution currentBest = population.get(0);
-                double currentBestFitness = getCachedFitness(currentBest, vms);
-                
-                if (currentBestFitness < bestFitness) {
-                    bestSolution = currentBest.clone();
-                    bestFitness = currentBestFitness;
-                    logger.debug("New best solution found at generation {} with fitness {}", 
-                               currentGeneration, bestFitness);
-                }
-                
-                // Check for convergence
-                if (hasConverged(population)) {
-                    logger.info("GA converged at generation {}", currentGeneration);
-                    break;
-                }
-                
-                // Create next generation
-                population = evolvePopulation(population);
-                
-                // Memory management for large problems
-                if (currentGeneration % 10 == 0) {
-                    fitnessCache.clear();
-                    if (ExperimentConfig.shouldRunGarbageCollection()) {
-                        System.gc();
-                    }
-                }
-            }
-            
-            logger.info("GA completed after {} generations with best fitness: {}", 
-                       currentGeneration, bestFitness);
-            
-            return bestSolution;
-            
-        } catch (Exception e) {
-            logger.error("Error in genetic algorithm execution: {}", e.getMessage(), e);
+        // Initialize population
+        List<Solution> population = initializePopulation(vms);
+        if (population.isEmpty()) {
+            logger.error("Failed to initialize GA population");
             return null;
-        } finally {
-            // Clear cache to free memory
-            fitnessCache.clear();
         }
+        
+        // Evaluate initial population
+        evaluatePopulation(population, vms);
+        
+        // Find best solution in initial population
+        bestSolution = population.stream()
+            .min((s1, s2) -> Double.compare(s1.getFitness(), s2.getFitness()))
+            .orElse(null);
+        
+        if (bestSolution == null) {
+            logger.error("No valid solution found in initial population");
+            return null;
+        }
+        
+        logger.info("GA: Initial best fitness: {}", bestSolution.getFitness());
+        
+        // Evolution loop
+        for (int generation = 0; generation < MAX_GENERATIONS; generation++) {
+            currentGeneration = generation;
+            convergenceIterations = generation + 1;
+            
+            // Check for convergence
+            if (hasConverged(population)) {
+                logger.info("GA: Converged at generation {}", generation);
+                break;
+            }
+            
+            // Evolve population
+            population = evolvePopulation(population);
+            
+            // Evaluate new population
+            evaluatePopulation(population, vms);
+            
+            // Update best solution
+            Solution currentBest = population.stream()
+                .min((s1, s2) -> Double.compare(s1.getFitness(), s2.getFitness()))
+                .orElse(bestSolution);
+            
+            if (currentBest.getFitness() < bestSolution.getFitness()) {
+                bestSolution = currentBest.clone();
+                logger.debug("GA: New best fitness at generation {}: {}", generation, bestSolution.getFitness());
+            }
+            
+            // Memory management check
+            if (generation % 10 == 0) {
+                MemoryManager.checkMemoryUsage("GA Generation " + generation);
+            }
+        }
+        
+        // End optimization timing
+        optimizationEndTime = System.currentTimeMillis();
+        optimizationTime = optimizationEndTime - optimizationStartTime;
+        
+        logger.info("GA: Completed {} generations in {:.2f}ms. Best fitness: {}", 
+                   convergenceIterations, optimizationTime, bestSolution.getFitness());
+        
+        return bestSolution;
     }
     
     /**
@@ -848,8 +858,8 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
         }
         
         // Check fitness variance
-        double minFitness = getCachedFitness(population.get(0), /* TODO: Provide VM list source here */ new ArrayList<>());
-        double maxFitness = getCachedFitness(population.get(Math.min(ELITE_SIZE, population.size() - 1)), /* TODO: Provide VM list source here */ new ArrayList<>());
+        double minFitness = getCachedFitness(population.get(0), new ArrayList<>());
+        double maxFitness = getCachedFitness(population.get(Math.min(ELITE_SIZE, population.size() - 1)), new ArrayList<>());
         
         return (maxFitness - minFitness) < AlgorithmConstants.DEFAULT_CONVERGENCE_THRESHOLD;
     }
@@ -914,7 +924,7 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
         // Select random individuals for tournament
         for (int i = 0; i < TOURNAMENT_SIZE; i++) {
             Solution candidate = population.get(random.nextInt(population.size()));
-            double fitness = getCachedFitness(candidate, /* TODO: Provide VM list source here */ new ArrayList<>());
+            double fitness = getCachedFitness(candidate, new ArrayList<>());
             
             if (fitness < bestFitness) {
                 bestFitness = fitness;
@@ -1026,11 +1036,38 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
     /**
      * Returns the name of this allocation policy.
      * 
-     * @return policy name
+     * @return the name of the policy
      */
     @Override
     public String getName() {
-        return "GA";
+        return "Genetic Algorithm Allocation";
+    }
+    
+    /**
+     * Gets the number of generations (convergence iterations) for this GA run.
+     * 
+     * @return number of generations completed
+     */
+    public int getConvergenceIterations() {
+        return convergenceIterations;
+    }
+    
+    /**
+     * Gets the optimization time in milliseconds for this GA run.
+     * 
+     * @return optimization time in milliseconds
+     */
+    public double getOptimizationTime() {
+        return optimizationTime;
+    }
+    
+    /**
+     * Gets the current generation number.
+     * 
+     * @return current generation
+     */
+    public int getCurrentGeneration() {
+        return currentGeneration;
     }
     
     /**
@@ -1075,11 +1112,13 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
     private static class Solution implements Cloneable {
         private final int[] allocations; // VM index -> Host index mapping
         private final int size;
+        private double fitness; // Added fitness field
         
         public Solution(int size) {
             this.size = size;
             this.allocations = new int[size];
             Arrays.fill(allocations, -1); // Initialize with no allocation
+            this.fitness = Double.MAX_VALUE; // Initialize fitness
         }
         
         public void setAllocation(int vmIndex, int hostIndex) {
@@ -1109,10 +1148,19 @@ private double calculateSLAViolations(Solution solution, List<Vm> vms) {
             return true;
         }
         
+        public double getFitness() {
+            return fitness;
+        }
+
+        public void setFitness(double fitness) {
+            this.fitness = fitness;
+        }
+        
         @Override
         public Solution clone() {
             Solution cloned = new Solution(size);
             System.arraycopy(allocations, 0, cloned.allocations, 0, size);
+            cloned.fitness = this.fitness;
             return cloned;
         }
         

@@ -526,6 +526,24 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
     }
     
     /**
+     * Gets the convergence iterations for BestFit (always 1 as it's single-pass).
+     * 
+     * @return Always 1 for BestFit algorithm
+     */
+    public int getConvergenceIterations() {
+        return 1; // BestFit is a single-pass algorithm
+    }
+    
+    /**
+     * Gets the optimization time for BestFit (total allocation time).
+     * 
+     * @return Total allocation time in milliseconds
+     */
+    public double getOptimizationTime() {
+        return totalAllocationTime.get() / 1_000_000.0; // Convert nanoseconds to milliseconds
+    }
+    
+    /**
      * Gets a description of this allocation algorithm.
      * 
      * @return A detailed description of the Best Fit algorithm

@@ -339,6 +339,24 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
     }
     
     /**
+     * Gets the convergence iterations for FirstFit (always 1 as it's single-pass).
+     * 
+     * @return Always 1 for FirstFit algorithm
+     */
+    public int getConvergenceIterations() {
+        return 1; // FirstFit is a single-pass algorithm
+    }
+    
+    /**
+     * Gets the optimization time for FirstFit (total allocation time).
+     * 
+     * @return Total allocation time in milliseconds
+     */
+    public double getOptimizationTime() {
+        return totalAllocationTime / 1_000_000.0; // Convert nanoseconds to milliseconds
+    }
+    
+    /**
      * Gets the total number of successful allocations.
      * 
      * @return Number of successful allocations

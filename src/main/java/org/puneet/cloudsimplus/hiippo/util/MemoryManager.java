@@ -280,15 +280,55 @@ public final class MemoryManager {
     }
     
     /**
-     * Checks if there is enough memory available for the given scenario (VMs and Hosts).
-     * Delegates to ExperimentConfig.hasEnoughMemoryForScenario for estimation logic.
-     *
-     * @param vmCount Number of VMs
-     * @param hostCount Number of Hosts
+     * Checks if there's enough memory available for a scenario with given VM and host counts.
+     * Uses conservative estimates to prevent OutOfMemoryError.
+     * 
+     * @param vmCount Number of VMs in the scenario
+     * @param hostCount Number of hosts in the scenario
      * @return true if enough memory is available, false otherwise
      */
     public static boolean hasEnoughMemoryForScenario(int vmCount, int hostCount) {
-        return org.puneet.cloudsimplus.hiippo.util.ExperimentConfig.hasEnoughMemoryForScenario(vmCount, hostCount);
+        // Conservative memory estimation per VM and host
+        long estimatedMemoryPerVm = 1024 * 1024; // 1MB per VM (objects, references, etc.)
+        long estimatedMemoryPerHost = 512 * 1024; // 512KB per host
+        long estimatedAlgorithmMemory = 50 * 1024 * 1024; // 50MB for algorithm overhead
+        
+        long totalEstimatedMemory = (vmCount * estimatedMemoryPerVm) + 
+                                   (hostCount * estimatedMemoryPerHost) + 
+                                   estimatedAlgorithmMemory;
+        
+        // Get current available heap memory
+        MemoryUsage heapUsage = MEMORY_BEAN.getHeapMemoryUsage();
+        long availableHeap = heapUsage.getMax() - heapUsage.getUsed();
+        
+        // Require at least 2GB free for safety margin
+        long safetyMargin = 2L * 1024 * 1024 * 1024; // 2GB
+        long requiredMemory = totalEstimatedMemory + safetyMargin;
+        
+        boolean hasEnoughMemory = availableHeap >= requiredMemory;
+        
+        logger.info("Memory check for scenario ({} VMs, {} hosts): Estimated: {}MB, Available: {}MB, Required: {}MB, HasEnough: {}",
+                   vmCount, hostCount, 
+                   totalEstimatedMemory / (1024 * 1024),
+                   availableHeap / (1024 * 1024),
+                   requiredMemory / (1024 * 1024),
+                   hasEnoughMemory);
+        
+        // If we don't have enough memory, try to free some
+        if (!hasEnoughMemory) {
+            logger.warn("Insufficient memory detected. Attempting emergency cleanup...");
+            emergencyMemoryCleanup();
+            
+            // Re-check after cleanup
+            heapUsage = MEMORY_BEAN.getHeapMemoryUsage();
+            availableHeap = heapUsage.getMax() - heapUsage.getUsed();
+            hasEnoughMemory = availableHeap >= requiredMemory;
+            
+            logger.info("After cleanup - Available: {}MB, HasEnough: {}", 
+                       availableHeap / (1024 * 1024), hasEnoughMemory);
+        }
+        
+        return hasEnoughMemory;
     }
     
     /**

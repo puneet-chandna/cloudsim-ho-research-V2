@@ -81,8 +81,22 @@ public class TestScenarios {
         try {
             // Check memory availability before creating scenario
             if (!MemoryManager.hasEnoughMemoryForScenario(spec.vmCount, spec.hostCount)) {
-                throw new ValidationException(
-                    "Insufficient memory for scenario: " + scenarioName);
+                // Try emergency memory cleanup
+                MemoryManager.emergencyMemoryCleanup();
+                
+                // Wait a bit for cleanup to complete
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                
+                // Re-check after cleanup
+                if (!MemoryManager.hasEnoughMemoryForScenario(spec.vmCount, spec.hostCount)) {
+                    throw new ValidationException(
+                        "Insufficient memory for scenario: " + scenarioName + 
+                        " (VMs: " + spec.vmCount + ", Hosts: " + spec.hostCount + ")");
+                }
             }
             
             MemoryManager.checkMemoryUsage("Before scenario creation: " + scenarioName);
