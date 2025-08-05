@@ -40,21 +40,21 @@ public class ExperimentCoordinator {
     // Scenario configurations - Real cloud environment scale
     private final List<String> scenarios = Arrays.asList(
         "Micro",     // 50 VMs, 10 Hosts
-        "Small",     // 200 VMs, 40 Hosts
-        "Medium",    // 500 VMs, 100 Hosts
-        "Large",     // 1000 VMs, 200 Hosts
-        "XLarge",    // 2000 VMs, 400 Hosts
-                        "Enterprise" // 2500 VMs, 500 Hosts
+        "Small",     // 100 VMs, 20 Hosts
+        "Medium",    // 200 VMs, 40 Hosts
+        "Large",     // 400 VMs, 100 Hosts
+        "XLarge",    // 500 VMs, 150 Hosts
+        "Enterprise" // 800 VMs, 300 Hosts
     );
     
     // Scenario specifications - Real cloud environment scale
     private static final Map<String, ScenarioSpec> scenarioSpecs = Map.of(
         "Micro", new ScenarioSpec("Micro", 50, 10, 1),       // 50 VMs, 10 Hosts, complexity 1
-        "Small", new ScenarioSpec("Small", 200, 40, 2),      // 200 VMs, 40 Hosts, complexity 2
-        "Medium", new ScenarioSpec("Medium", 500, 100, 3),   // 500 VMs, 100 Hosts, complexity 3
-        "Large", new ScenarioSpec("Large", 1000, 200, 4),    // 1000 VMs, 200 Hosts, complexity 4
-        "XLarge", new ScenarioSpec("XLarge", 2000, 400, 5),  // 2000 VMs, 400 Hosts, complexity 5
-        "Enterprise", new ScenarioSpec("Enterprise", 2500, 600, 6)  // 2500 VMs, 600 Hosts, complexity 6
+        "Small", new ScenarioSpec("Small", 100, 20, 2),      // 200 VMs, 40 Hosts, complexity 2
+        "Medium", new ScenarioSpec("Medium", 200, 40, 3),   // 500 VMs, 100 Hosts, complexity 3
+        "Large", new ScenarioSpec("Large", 400, 100, 4),    // 1000 VMs, 200 Hosts, complexity 4
+        "XLarge", new ScenarioSpec("XLarge", 500, 150, 5),  // 2000 VMs, 400 Hosts, complexity 5
+        "Enterprise", new ScenarioSpec("Enterprise", 800, 300, 6)  // 2500 VMs, 600 Hosts, complexity 6
     );
     
     // Configuration parameters
