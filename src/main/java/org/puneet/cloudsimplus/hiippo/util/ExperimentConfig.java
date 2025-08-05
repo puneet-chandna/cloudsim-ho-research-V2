@@ -38,8 +38,8 @@ public final class ExperimentConfig {
     
     // Experiment configuration - Increased for statistical significance and real cloud simulation
     public static final int REPLICATION_COUNT = 30;  // Increased for statistical significance (30 replications per scenario)
-    public static final long MAX_HEAP_SIZE = 8L * 1024 * 1024 * 1024; // 8GB
-    public static final long MEMORY_WARNING_THRESHOLD = 7L * 1024 * 1024 * 1024; // 7GB
+    public static final long MAX_HEAP_SIZE = 10L * 1024 * 1024 * 1024; // 10GB
+    public static final long MEMORY_WARNING_THRESHOLD = 8L * 1024 * 1024 * 1024; // 8GB
     
     /** Confidence level for statistical analysis (95% = standard in research) */
     public static final double CONFIDENCE_LEVEL = 0.95;
