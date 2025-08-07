@@ -234,8 +234,6 @@ public class DatacenterFactory {
      */
     private static PowerModelHost createPowerModel() {
         return new PowerModelHostSimple(MAX_POWER_WATTS, STATIC_POWER_WATTS)
-            .setStartupDelay(STARTUP_DELAY)
-            .setShutDownDelay(SHUTDOWN_DELAY)
             .setStartupPower(STARTUP_POWER)
             .setShutDownPower(SHUTDOWN_POWER);
     }

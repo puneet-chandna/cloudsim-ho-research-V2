@@ -132,9 +132,36 @@ public class ResultValidator {
             throw new ValidationException("No hosts available for allocation");
         }
         
-        // Skip resource constraint validation since VMs are deallocated
-        // Resource constraints are validated during the actual simulation
-        logger.debug("Skipping resource constraint validation - VMs have been deallocated");
+        // CRITICAL FIX: Validate resource constraints only if VMs are still allocated
+        // This prevents false validation failures after CloudSim+ deallocates VMs
+        validateResourceConstraintsIfVMsAllocated(result, hosts);
+    }
+    
+    /**
+     * Validates resource constraints only if VMs are still allocated on hosts.
+     * This prevents false validation failures after CloudSim+ deallocates VMs.
+     * 
+     * @param result The experiment result
+     * @param hosts The list of hosts to validate
+     * @throws ValidationException if resource constraints are violated
+     */
+    private static void validateResourceConstraintsIfVMsAllocated(ExperimentResult result, List<Host> hosts) throws ValidationException {
+        // Check if any hosts still have VMs allocated (indicating VMs haven't been deallocated yet)
+        boolean hasAllocatedVMs = hosts.stream().anyMatch(host -> !host.getVmList().isEmpty());
+        
+        if (!hasAllocatedVMs) {
+            logger.debug("VMs have been deallocated - skipping resource constraint validation");
+            return;
+        }
+        
+        logger.debug("VMs are still allocated - validating resource constraints");
+        
+        // Validate each host that has VMs allocated
+        for (Host host : hosts) {
+            if (!host.getVmList().isEmpty()) {
+                validateHostResourceConstraints(host);
+            }
+        }
     }
     
     /**

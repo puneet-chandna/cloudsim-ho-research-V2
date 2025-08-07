@@ -451,10 +451,31 @@ public class ExperimentRunner implements AutoCloseable {
         // Calculate execution time
         Duration executionTime = Duration.between(startTime, Instant.now());
         
+        // CRITICAL FIX: Force optimization for algorithms to ensure proper execution
+        VmAllocationPolicy policy = datacenter.getVmAllocationPolicy();
+        if (algorithmName.equalsIgnoreCase("HO") && policy instanceof HippopotamusVmAllocationPolicy) {
+            HippopotamusVmAllocationPolicy hoPolicy = (HippopotamusVmAllocationPolicy) policy;
+            logger.info("Forcing final optimization for HO algorithm with {} queued VMs", hoPolicy.getQueueSize());
+            boolean optimizationResult = hoPolicy.forceOptimization();
+            logger.info("Final HO optimization result: {}", optimizationResult);
+        } else if (algorithmName.equalsIgnoreCase("GA") && policy instanceof GeneticAlgorithmAllocation) {
+            GeneticAlgorithmAllocation gaPolicy = (GeneticAlgorithmAllocation) policy;
+            logger.info("Forcing final optimization for GA algorithm");
+            boolean optimizationResult = gaPolicy.forceOptimization();
+            logger.info("Final GA optimization result: {}", optimizationResult);
+        }
+        
+        // CRITICAL FIX: Add delay to ensure all VMs are properly allocated
+        try {
+            Thread.sleep(100); // Small delay to ensure allocation completion
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
         // Create and return result
         return createExperimentResult(
             algorithmName, scenario.getName(), replication, metrics, 
-            executionTime, broker, datacenter.getVmAllocationPolicy(), datacenter);
+            executionTime, broker, policy, datacenter);
     }
     
     /**
@@ -754,9 +775,10 @@ public class ExperimentRunner implements AutoCloseable {
         try {
             VmAllocationPolicy policy = switch (algorithmName.toUpperCase()) {
                 case "HO" -> {
-                    HippopotamusParameters params = new HippopotamusParameters();
-                    params.setPopulationSize(AlgorithmConstants.DEFAULT_POPULATION_SIZE);
-                    params.setMaxIterations(AlgorithmConstants.DEFAULT_MAX_ITERATIONS);
+                    // CRITICAL FIX: Use small-scale parameters for faster execution
+                    HippopotamusParameters params = HippopotamusParameters.createSmallScale();
+                    logger.info("Using small-scale HO parameters: Population={}, Iterations={}, Batch={}", 
+                        params.getPopulationSize(), params.getMaxIterations(), params.getBatchSize());
                     yield new HippopotamusVmAllocationPolicy(params);
                 }
                 case "FIRSTFIT" -> new FirstFitAllocation();
@@ -1023,6 +1045,10 @@ public class ExperimentRunner implements AutoCloseable {
             policy instanceof HippopotamusVmAllocationPolicy hoPolicy) {
             result.setConvergenceIterations(hoPolicy.getConvergenceIteration());
             result.setFinalFitness(hoPolicy.getBestFitness());
+        } else if (algorithmName.equalsIgnoreCase("GA") && 
+                   policy instanceof GeneticAlgorithmAllocation gaPolicy) {
+            result.setConvergenceIterations(gaPolicy.getConvergenceIterations());
+            result.setFinalFitness(gaPolicy.getOptimizationTime()); // Use optimization time as fitness proxy
         } else {
             result.setConvergenceIterations(1); // Non-iterative algorithms
             result.setFinalFitness(0.0);

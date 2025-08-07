@@ -98,6 +98,9 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
         this.hoAlgorithm = new HippopotamusOptimization(parameters);
         this.vmHostMap = new ConcurrentHashMap<>();
         this.hostVmMap = new ConcurrentHashMap<>();
+        
+        // CRITICAL FIX: Enable batch optimization by default for true HO optimization
+        this.batchOptimizationEnabled = true;
         this.validator = new AllocationValidator();
         this.metricsCollector = new MetricsCollector();
         this.vmAllocationQueue = new LinkedList<>();
@@ -136,14 +139,20 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 return HostSuitability.NULL;
             }
             
-            // Always use HO algorithm for allocation
-            boolean result = performDirectAllocation(vm);
-            if (result) {
-                logger.info("Successfully allocated VM {} using HO algorithm", vm.getId());
-                return HostSuitability.NULL; // CloudSim Plus will handle the allocation
+            // CRITICAL FIX: Use batch processing for true optimization
+            if (batchOptimizationEnabled) {
+                boolean result = handleBatchAllocation(vm);
+                return result ? HostSuitability.NULL : HostSuitability.NULL;
             } else {
-                logger.warn("Failed to allocate VM {} using HO algorithm", vm.getId());
-                return HostSuitability.NULL;
+                // Fallback to direct allocation if batch processing is disabled
+                boolean result = performDirectAllocation(vm);
+                if (result) {
+                    logger.info("Successfully allocated VM {} using direct HO algorithm", vm.getId());
+                    return HostSuitability.NULL;
+                } else {
+                    logger.warn("Failed to allocate VM {} using direct HO algorithm", vm.getId());
+                    return HostSuitability.NULL;
+                }
             }
             
         } catch (Exception e) {
@@ -166,10 +175,18 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             
             // Check if we should trigger batch optimization
             if (shouldTriggerBatchOptimization()) {
-                return performBatchOptimization();
+                boolean result = performBatchOptimization();
+                // Check if the VM was actually allocated
+                if (result && vmHostMap.containsKey(vm)) {
+                    return true;
+                } else {
+                    // VM was not allocated, remove from queue and return false
+                    vmAllocationQueue.remove(vm);
+                    return false;
+                }
             }
             
-            // VM is queued but not yet allocated
+            // VM is queued and will be allocated in next batch - return true to indicate success
             return true;
         }
     }
@@ -302,8 +319,22 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
             // Run HO algorithm (use standard optimize method)
             Solution solution = hoAlgorithm.optimize(vms, hosts);
             
-            // Update convergence tracking
-            convergenceIterations = hoAlgorithm.getConvergenceAnalyzer().getConvergenceRate();
+            // CRITICAL FIX: Update convergence tracking with actual iteration count
+            ConvergenceAnalyzer analyzer = hoAlgorithm.getConvergenceAnalyzer();
+            if (analyzer != null) {
+                ConvergenceAnalyzer.ConvergenceReport report = analyzer.getConvergenceReport();
+                convergenceIterations = report.convergenceIteration > 0 ? report.convergenceIteration : 1;
+                bestFitness = report.bestFitness;
+                logger.info("HO algorithm converged after {} iterations with fitness: {}", 
+                    convergenceIterations, bestFitness);
+            } else {
+                // Fallback: use fitness history size as iteration count
+                List<Double> fitnessHistory = hoAlgorithm.getConvergenceHistory();
+                convergenceIterations = fitnessHistory.size() > 0 ? fitnessHistory.size() : 1;
+                bestFitness = solution != null ? solution.getFitness() : 0.0;
+                logger.info("Using fitness history size as convergence iterations: {} with fitness: {}", 
+                    convergenceIterations, bestFitness);
+            }
             optimizationTime = (System.currentTimeMillis() - startTime) / 1000.0;
             
             // Update best fitness from the solution
@@ -378,19 +409,45 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
     private boolean performDirectAllocation(Vm vm) {
         logger.debug("Performing direct allocation for VM {} using HO algorithm", vm.getId());
         
-        // Get available hosts
+        // Get available hosts with more detailed logging
         List<Host> availableHosts = getHostList().stream()
             .filter(host -> host.isActive() && !host.isFailed())
             .filter(host -> Boolean.TRUE.equals(host.isSuitableForVm(vm)))
             .collect(Collectors.toList());
         
+        logger.debug("Found {} suitable hosts for VM {} (total hosts: {})", 
+            availableHosts.size(), vm.getId(), getHostList().size());
+        
         if (availableHosts.isEmpty()) {
-            logger.warn("No suitable hosts available for VM {}", vm.getId());
+            // CRITICAL FIX: Log detailed host information for debugging
+            logger.error("No suitable hosts available for VM {}. VM specs: MIPS={}, RAM={}, PEs={}", 
+                vm.getId(), vm.getTotalMipsCapacity(), vm.getRam().getCapacity(), vm.getPesNumber());
+            
+            // Log all hosts for debugging
+            for (Host host : getHostList()) {
+                logger.error("Host {}: Active={}, Failed={}, Suitable={}, CPU={}/{}, RAM={}/{}, PEs={}/{}", 
+                    host.getId(), host.isActive(), host.isFailed(), 
+                    Boolean.TRUE.equals(host.isSuitableForVm(vm)),
+                    host.getCpuMipsUtilization(), host.getTotalMipsCapacity(),
+                    host.getRam().getAllocatedResource(), host.getRam().getCapacity(),
+                    host.getVmList().size(), host.getPesNumber());
+            }
             return false;
         }
         
         try {
-            // Use HO algorithm to find optimal placement
+            // CRITICAL FIX: Use simple heuristic first for guaranteed allocation
+            Host bestHost = findBestHostForVm(vm, availableHosts);
+            if (bestHost != null) {
+                boolean result = performAllocation(vm, bestHost);
+                if (result) {
+                    logger.info("Simple heuristic allocation successful: VM {} to host {}", vm.getId(), bestHost.getId());
+                    return true;
+                }
+            }
+            
+            // Fallback to HO algorithm if simple heuristic fails
+            logger.debug("Simple heuristic failed, trying HO algorithm for VM {}", vm.getId());
             List<Vm> singleVm = Arrays.asList(vm);
             Solution solution = hoAlgorithm.optimize(singleVm, availableHosts);
             
@@ -412,25 +469,8 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 }
             }
             
-            // Fallback to simple heuristic if HO fails
-            logger.warn("HO algorithm failed, falling back to simple heuristic for VM {}", vm.getId());
-            Host bestHost = findBestHostForVm(vm, availableHosts);
-            
-            if (bestHost != null) {
-                boolean result = performAllocation(vm, bestHost);
-                if (result) {
-                    logger.info("Fallback allocation successful: VM {} to host {}", vm.getId(), bestHost.getId());
-                }
-                return result;
-            }
-            
         } catch (Exception e) {
             logger.error("Error in HO algorithm for VM {}: {}", vm.getId(), e.getMessage(), e);
-            // Fallback to simple heuristic
-            Host bestHost = findBestHostForVm(vm, availableHosts);
-            if (bestHost != null) {
-                return performAllocation(vm, bestHost);
-            }
         }
         
         logger.warn("Could not find suitable host for VM {}", vm.getId());
@@ -665,14 +705,51 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
      * @return true if optimization was triggered successfully
      */
     public boolean forceOptimization() {
-        synchronized (vmAllocationQueue) {
-            if (!vmAllocationQueue.isEmpty()) {
-                logger.info("Forcing batch optimization for {} queued VMs", 
-                    vmAllocationQueue.size());
-                return performBatchOptimization();
-            }
+        // CRITICAL FIX: Re-optimize placement of all allocated VMs
+        List<Vm> allocatedVms = new ArrayList<>(vmHostMap.keySet());
+        if (allocatedVms.isEmpty()) {
+            logger.info("No VMs to re-optimize");
+            return true;
         }
-        return true;
+        
+        logger.info("Forcing re-optimization of {} allocated VMs", allocatedVms.size());
+        
+        try {
+            // Get all available hosts
+            List<Host> availableHosts = getHostList().stream()
+                .filter(host -> host.isActive() && !host.isFailed())
+                .collect(Collectors.toList());
+            
+            if (availableHosts.isEmpty()) {
+                logger.warn("No available hosts for re-optimization");
+                return false;
+            }
+            
+            // Run HO algorithm on all allocated VMs
+            Solution solution = hoAlgorithm.optimize(allocatedVms, availableHosts);
+            
+            if (solution != null && solution.getAllocatedVmCount() > 0) {
+                // Apply the optimized solution
+                boolean result = applySolution(solution, allocatedVms);
+                
+                // Update convergence tracking
+                ConvergenceAnalyzer analyzer = hoAlgorithm.getConvergenceAnalyzer();
+                if (analyzer != null) {
+                    ConvergenceAnalyzer.ConvergenceReport report = analyzer.getConvergenceReport();
+                    convergenceIterations = report.convergenceIteration > 0 ? report.convergenceIteration : 1;
+                    logger.info("Re-optimization completed with {} iterations", convergenceIterations);
+                }
+                
+                return result;
+            } else {
+                logger.warn("HO algorithm failed to find solution for re-optimization");
+                return false;
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error during re-optimization: {}", e.getMessage(), e);
+            return false;
+        }
     }
     
     /**

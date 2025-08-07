@@ -210,51 +210,20 @@ public class FirstFitAllocation extends BaselineVmAllocationPolicy {
         if (host == null || vm == null) {
             return false;
         }
+        
         try {
+            // CRITICAL FIX: Trust CloudSim+'s built-in suitability check and add minimal validation
             if (!host.isActive() || host.isFailed()) {
                 logger.trace("Host {} is not active or has failed", host.getId());
                 return false;
             }
-            // host.isSuitableForVm(vm) returns boolean in this codebase
+            
+            // Use CloudSim+'s built-in suitability check
             boolean suitable = host.isSuitableForVm(vm);
-            if (suitable) {
-                double requiredMips = vm.getTotalMipsCapacity();
-                double availableMips = host.getTotalMipsCapacity();
-                // If getAllocatedMips(v) returns MipsShare or similar, extract double value
-                double usedMips = host.getVmList().stream().mapToDouble(v -> {
-                    Object mipsObj = host.getVmScheduler().getAllocatedMips(v);
-                    if (mipsObj instanceof Number) {
-                        return ((Number) mipsObj).doubleValue();
-                    } else if (mipsObj != null && mipsObj.getClass().getSimpleName().equals("MipsShare")) {
-                        try {
-                            return ((Number) mipsObj.getClass().getMethod("getValue").invoke(mipsObj)).doubleValue();
-                        } catch (Exception e) {
-                            logger.error("Error extracting value from MipsShare: {}", e.getMessage());
-                            return 0.0;
-                        }
-                    } else {
-                        return 0.0;
-                    }
-                }).sum();
-                availableMips -= usedMips;
-                double requiredRam = vm.getRam().getCapacity();
-                double availableRam = host.getRam().getAvailableResource();
-                double requiredStorage = vm.getStorage().getCapacity();
-                double availableStorage = host.getStorage().getAvailableResource();
-                double requiredBw = vm.getBw().getCapacity();
-                double availableBw = host.getBw().getAvailableResource();
-                if (availableMips < requiredMips || availableRam < requiredRam ||
-                    availableStorage < requiredStorage || availableBw < requiredBw) {
-                    logger.trace("Host {} has insufficient resources for VM {}: " +
-                        "MIPS: {}/{}, RAM: {}/{}, Storage: {}/{}, BW: {}/{}",
-                        host.getId(), vm.getId(),
-                        availableMips, requiredMips,
-                        availableRam, requiredRam,
-                        availableStorage, requiredStorage,
-                        availableBw, requiredBw);
-                    return false;
-                }
-            }
+            
+            // CRITICAL FIX: Trust CloudSim+'s built-in check - no redundant validation needed
+            // The host.isSuitableForVm(vm) method already performs comprehensive resource validation
+            
             return suitable;
         } catch (Exception e) {
             logger.error("Error checking host {} suitability for VM {}: {}",

@@ -101,10 +101,13 @@ public class HODatacenterBroker extends DatacenterBrokerSimple {
         this.failedAllocations = new AtomicInteger(0);
         this.vmSubmissionOrder = Collections.synchronizedList(new ArrayList<>());
         
+        // Enable batch VM creation for optimization algorithms
+        this.setBatchVmCreation(true);
+        
         // Configure broker settings
         configureShutdownBehavior();
         
-        logger.info("Created HODatacenterBroker for algorithm: {}, scenario: {}, replication: {}",
+        logger.info("Created HODatacenterBroker for algorithm: {}, scenario: {}, replication: {} with batch VM creation enabled",
             algorithmName, scenarioName, replicationNumber);
     }
     

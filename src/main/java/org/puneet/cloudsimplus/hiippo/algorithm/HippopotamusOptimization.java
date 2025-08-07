@@ -523,29 +523,49 @@ public class HippopotamusOptimization {
     private HippopotamusVmAllocationPolicy.Solution repairSolution(HippopotamusVmAllocationPolicy.Solution solution) {
         HippopotamusVmAllocationPolicy.Solution repaired = new HippopotamusVmAllocationPolicy.Solution();
         
-        // Ensure all VMs are placed
+        // CRITICAL FIX: Implement improved repair strategy with load balancing
+        Map<Host, Integer> hostVmCount = new HashMap<>();
+        
+        // Count VMs per host for load balancing
+        for (Host host : solution.getAllocations().values()) {
+            hostVmCount.put(host, hostVmCount.getOrDefault(host, 0) + 1);
+        }
+        
+        // Repair each VM placement
         for (Vm vm : solution.getAllocations().keySet()) {
-            Host host = solution.getHostForVm(vm);
+            Host currentHost = solution.getHostForVm(vm);
             
-            if (host == null || !host.isSuitableForVm(vm)) {
-                // Find new suitable host
-                List<Host> availableHosts = solution.getAllocations().values().stream()
+            if (currentHost == null || !currentHost.isSuitableForVm(vm)) {
+                // Find best suitable host based on load balancing
+                List<Host> suitableHosts = solution.getAllocations().values().stream()
                     .distinct()
                     .filter(h -> h.isSuitableForVm(vm))
                     .collect(Collectors.toList());
                 
-                if (!availableHosts.isEmpty()) {
-                    host = availableHosts.get(random.nextInt(availableHosts.size()));
+                if (!suitableHosts.isEmpty()) {
+                    // Sort by VM count (prefer less loaded hosts)
+                    suitableHosts.sort((h1, h2) -> {
+                        int count1 = hostVmCount.getOrDefault(h1, 0);
+                        int count2 = hostVmCount.getOrDefault(h2, 0);
+                        return Integer.compare(count1, count2);
+                    });
+                    
+                    currentHost = suitableHosts.get(0);
+                    // Update VM count for selected host
+                    hostVmCount.put(currentHost, hostVmCount.getOrDefault(currentHost, 0) + 1);
                 }
             }
             
-            if (host != null) {
-                repaired.addMapping(vm, host);
+            if (currentHost != null) {
+                repaired.addMapping(vm, currentHost);
             }
         }
         
+        logger.debug("Solution repaired with {} VMs using load balancing", repaired.getAllocations().size());
         return repaired;
     }
+    
+
     
     /**
      * Validates a solution to ensure it meets all constraints.

@@ -252,7 +252,7 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
             allocationTimestamps.remove(vm.getId());
             
             // Perform deallocation
-            host.destroyVm(vm);
+            ((org.cloudsimplus.hosts.HostAbstract)host).destroyVm(vm);
             
             logger.info("Successfully deallocated VM {} from host {}", 
                 vm.getId(), host.getId());

@@ -11,7 +11,7 @@ import org.puneet.cloudsimplus.hiippo.statistical.StatisticalValidator;
 import org.puneet.cloudsimplus.hiippo.util.*;
 import org.puneet.cloudsimplus.hiippo.util.CSVResultsWriter.ExperimentResult;
 import org.puneet.cloudsimplus.hiippo.simulation.TestScenarios.TestScenario;
-import org.puneet.cloudsimplus.hiippo.simulation.ExperimentCoordinator.ScenarioSpec;
+import org.puneet.cloudsimplus.hiippo.util.ScenarioConfigLoader.ScenarioSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

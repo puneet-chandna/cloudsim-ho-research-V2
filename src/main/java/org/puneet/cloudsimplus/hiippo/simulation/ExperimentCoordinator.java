@@ -3,6 +3,7 @@ package org.puneet.cloudsimplus.hiippo.simulation;
 import org.puneet.cloudsimplus.hiippo.exceptions.*;
 import org.puneet.cloudsimplus.hiippo.statistical.*;
 import org.puneet.cloudsimplus.hiippo.util.*;
+import org.puneet.cloudsimplus.hiippo.util.ScenarioConfigLoader.ScenarioSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,25 +38,10 @@ public class ExperimentCoordinator {
         "GA"         // Genetic Algorithm
     );
     
-    // Scenario configurations - Real cloud environment scale
-    private final List<String> scenarios = Arrays.asList(
-        "Micro",     // 50 VMs, 10 Hosts
-        "Small",     // 200 VMs, 40 Hosts
-        "Medium",    // 500 VMs, 100 Hosts
-        "Large",     // 1000 VMs, 200 Hosts
-        "XLarge",    // 2000 VMs, 400 Hosts
-                        "Enterprise" // 2500 VMs, 500 Hosts
-    );
-    
-    // Scenario specifications - Real cloud environment scale
-    private static final Map<String, ScenarioSpec> scenarioSpecs = Map.of(
-        "Micro", new ScenarioSpec("Micro", 50, 10, 1),       // 50 VMs, 10 Hosts, complexity 1
-        "Small", new ScenarioSpec("Small", 200, 40, 2),      // 200 VMs, 40 Hosts, complexity 2
-        "Medium", new ScenarioSpec("Medium", 500, 100, 3),   // 500 VMs, 100 Hosts, complexity 3
-        "Large", new ScenarioSpec("Large", 1000, 200, 4),    // 1000 VMs, 200 Hosts, complexity 4
-        "XLarge", new ScenarioSpec("XLarge", 2000, 400, 5),  // 2000 VMs, 400 Hosts, complexity 5
-        "Enterprise", new ScenarioSpec("Enterprise", 2500, 600, 6)  // 2500 VMs, 600 Hosts, complexity 6
-    );
+    // Configuration loader for scenarios
+    private final ScenarioConfigLoader configLoader;
+    private final List<String> scenarios;
+    private final Map<String, ScenarioConfigLoader.ScenarioSpec> scenarioSpecs;
     
     // Configuration parameters
     private final int batchSize;
@@ -98,6 +84,21 @@ public class ExperimentCoordinator {
         this.allResults = new ConcurrentHashMap<>();
         this.experimentId = generateExperimentId();
         
+        // CRITICAL FIX: Initialize configuration loader and load scenarios from config.properties
+        try {
+            this.configLoader = new ScenarioConfigLoader();
+            this.configLoader.validateConfiguration();
+            this.scenarios = this.configLoader.getEnabledScenarios();
+            this.scenarioSpecs = this.configLoader.getScenarioSpecifications();
+            
+            logger.info("Successfully loaded {} scenarios from configuration: {}", 
+                this.scenarios.size(), this.scenarios);
+            
+        } catch (Exception e) {
+            logger.error("Failed to load scenario configuration: {}", e.getMessage());
+            throw new RuntimeException("Failed to initialize ExperimentCoordinator due to configuration error", e);
+        }
+        
         // Initialize executor service for parallel execution
         if (parallelExecution) {
             int cores = Runtime.getRuntime().availableProcessors();
@@ -114,6 +115,9 @@ public class ExperimentCoordinator {
         // Initialize statistical components
         this.statisticalValidator = new StatisticalValidator();
         this.comparisonAnalyzer = new ComparisonAnalyzer();
+        
+        // Initialize CSVResultsWriter with RunManager paths
+        CSVResultsWriter.initializeWithRunManager();
         
         logger.info("ExperimentCoordinator initialized - ID: {}, Batch Size: {}, Parallel: {}",
             experimentId, batchSize, parallelExecution);
@@ -161,8 +165,8 @@ public class ExperimentCoordinator {
             
             // Process scenarios in order of size to avoid memory issues
             for (String scenario : scenarios) {
-                // Check memory availability
-                ScenarioSpec spec = scenarioSpecs.get(scenario);
+                            // Check memory availability
+            ScenarioConfigLoader.ScenarioSpec spec = scenarioSpecs.get(scenario);
                 if (!checkMemoryForScenario(spec)) {
                     logger.warn("Skipping scenario {} due to memory constraints", scenario);
                     updateSkippedExperiments(scenario, completed, totalExperiments);
@@ -327,7 +331,7 @@ public class ExperimentCoordinator {
             ExperimentConfig.initializeRandomSeed(replication);
             
             // Create test scenario
-            ScenarioSpec spec = scenarioSpecs.get(scenario);
+            ScenarioConfigLoader.ScenarioSpec spec = scenarioSpecs.get(scenario);
             TestScenario testScenario = TestScenarios.createScenario(scenario, spec.vmCount, spec.hostCount);
             
             if (testScenario == null) {
@@ -504,7 +508,8 @@ public class ExperimentCoordinator {
         logger.info("Generating parameter sensitivity analysis...");
         
         try {
-            Path sensitivityDir = Paths.get("results/parameter_sensitivity");
+            // Use RunManager to get the correct parameter sensitivity directory
+            Path sensitivityDir = RunManager.getInstance().getResultsSubdirectory("parameter_sensitivity");
             Files.createDirectories(sensitivityDir);
             
             // Generate population size sensitivity analysis
@@ -522,7 +527,7 @@ public class ExperimentCoordinator {
             // Generate gamma parameter sensitivity analysis
             generateGammaParameterSensitivity(sensitivityDir);
             
-            logger.info("Parameter sensitivity analysis completed");
+            logger.info("Parameter sensitivity analysis completed in: {}", sensitivityDir);
             
         } catch (Exception e) {
             logger.error("Failed to generate parameter sensitivity analysis", e);
@@ -748,11 +753,11 @@ public class ExperimentCoordinator {
                 
                 if (!algorithmResults.isEmpty()) {
                     if (ExperimentConfig.ENABLE_REPORT_GENERATION) {
-                        // Convert ScenarioSpec to Object for compatibility
-                        Map<String, Object> scenarioSpecsObject = new HashMap<>();
-                        for (Map.Entry<String, ScenarioSpec> entry : scenarioSpecs.entrySet()) {
-                            scenarioSpecsObject.put(entry.getKey(), entry.getValue());
-                        }
+                                // Convert ScenarioSpec to Object for compatibility
+        Map<String, Object> scenarioSpecsObject = new HashMap<>();
+        for (Map.Entry<String, ScenarioConfigLoader.ScenarioSpec> entry : scenarioSpecs.entrySet()) {
+            scenarioSpecsObject.put(entry.getKey(), entry.getValue());
+        }
                         CSVResultsWriter.writeScalabilityAnalysis(algorithm, algorithmResults, scenarioSpecsObject);
                     }
                 }
@@ -950,6 +955,13 @@ public class ExperimentCoordinator {
     private void cleanup() {
         logger.info("Cleaning up resources...");
         
+        // Copy logs to run-specific directory
+        try {
+            RunManager.getInstance().copyLogsToRunDirectory();
+        } catch (Exception e) {
+            logger.error("Failed to copy logs to run directory", e);
+        }
+        
         // Shutdown executor service
         if (executorService != null && !executorService.isShutdown()) {
             executorService.shutdown();
@@ -991,36 +1003,7 @@ public class ExperimentCoordinator {
         return experimentId;
     }
     
-    /**
-     * Inner class representing scenario specifications.
-     */
-    public static class ScenarioSpec {
-        public final String name;
-        public final int vmCount;
-        public final int hostCount;
-        public final int complexityLevel;
-        
-        /**
-         * Creates a new scenario specification.
-         *
-         * @param name Scenario name
-         * @param vmCount Number of VMs
-         * @param hostCount Number of hosts
-         * @param complexityLevel Complexity level (1-5)
-         */
-        public ScenarioSpec(String name, int vmCount, int hostCount, int complexityLevel) {
-            this.name = name;
-            this.vmCount = vmCount;
-            this.hostCount = hostCount;
-            this.complexityLevel = complexityLevel;
-        }
-        
-        @Override
-        public String toString() {
-            return String.format("ScenarioSpec[%s: %d VMs, %d Hosts, Level %d]",
-                name, vmCount, hostCount, complexityLevel);
-        }
-    }
+
     
     /**
      * Inner class representing experiment status.

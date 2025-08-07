@@ -280,7 +280,7 @@ public class MetricsCollector {
                 if (cloudlet == null) continue;
                 
                 // Check response time SLA
-                double actualTime = cloudlet.getFinishTime() - cloudlet.getExecStartTime();
+                double actualTime = cloudlet.getFinishTime() - cloudlet.getStartTime();
                 double expectedTime = cloudlet.getLength() / cloudlet.getVm().getMips();
                 
                 if (actualTime > expectedTime * SLA_RESPONSE_TIME_THRESHOLD) {

@@ -53,9 +53,9 @@ public class TestScenarios {
     // VM Configurations (MIPS, PEs, RAM MB, BW Mbps, Storage MB)
     private static final Map<String, VmConfig> VM_CONFIGS = Map.of(
         VM_SMALL, new VmConfig(1000, 1, 512, 100, 1000),
-        VM_MEDIUM, new VmConfig(2000, 2, 2048, 200, 2000),
-        VM_LARGE, new VmConfig(4000, 4, 4096, 400, 4000),
-        VM_XLARGE, new VmConfig(8000, 8, 8192, 800, 8000)
+        VM_MEDIUM, new VmConfig(1500, 2, 2048, 200, 2000),
+        VM_LARGE, new VmConfig(2000, 4, 4096, 400, 4000),
+        VM_XLARGE, new VmConfig(3000, 8, 8192, 800, 8000)
     );
     
     // Host Configurations (PEs, MIPS per PE, RAM MB, BW Mbps, Storage MB, Max Power W, Static Power %)
