@@ -106,7 +106,7 @@
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>org.puneet.cloudsimplus.hiippo.App</mainClass>
-                    <commandlineArgs>-Xmx10G -Xms10G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -Xloggc:gc.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof -XX:+DisableExplicitGC</commandlineArgs>
+                    <commandlineArgs>-Xmx50G -Xms50G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -Xloggc:gc.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof -XX:+DisableExplicitGC</commandlineArgs>
                 </configuration>
             </plugin>
             

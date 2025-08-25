@@ -54,7 +54,7 @@ public class ExperimentCoordinator {
         "Medium", new ScenarioSpec("Medium", 200, 40, 3),   // 500 VMs, 100 Hosts, complexity 3
         "Large", new ScenarioSpec("Large", 400, 100, 4),    // 1000 VMs, 200 Hosts, complexity 4
         "XLarge", new ScenarioSpec("XLarge", 500, 150, 5),  // 2000 VMs, 400 Hosts, complexity 5
-        "Enterprise", new ScenarioSpec("Enterprise", 800, 300, 6)  // 2500 VMs, 600 Hosts, complexity 6
+        "Enterprise", new ScenarioSpec("Enterprise", 600, 200, 6)  // 2500 VMs, 600 Hosts, complexity 6
     );
     
     // Configuration parameters
