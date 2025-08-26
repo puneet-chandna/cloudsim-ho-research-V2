@@ -11,8 +11,8 @@
 echo "=========================================="
 echo "CloudSim HO Research Experiment Runner"
 echo "=========================================="
-echo "Heap Configuration: 10GB (initial and max)"
-echo "System Memory: 16GB"
+echo "Heap Configuration: 50GB (initial and max)"
+echo "System Memory: 64GB"
 echo "Date: $(date)"
 echo "=========================================="
 
@@ -27,8 +27,8 @@ echo "Checking system memory..."
 TOTAL_MEM=$(free -g | awk '/^Mem:/{print $2}')
 echo "Total system memory: ${TOTAL_MEM}GB"
 
-if [ "$TOTAL_MEM" -lt 12 ]; then
-    echo "Warning: System has less than 12GB RAM. 10GB heap may cause issues."
+if [ "$TOTAL_MEM" -lt 64 ]; then
+    echo "Warning: System has less than 64GB RAM. 50GB heap may cause issues."
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -47,7 +47,7 @@ fi
 echo "Build successful!"
 
 # Run the experiment
-echo "Starting experiment with 10GB heap configuration..."
+echo "Starting experiment with 50GB heap configuration..."
 echo "This may take 1-2 hours for the complete experimental suite."
 echo ""
 
