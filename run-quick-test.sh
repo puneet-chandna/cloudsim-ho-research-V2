@@ -1,25 +1,24 @@
 #!/bin/bash
 
-# Quick test script for running individual experiments
-# Usage: ./run-quick-test.sh <scenario> <algorithm> <replications>
-# Example: ./run-quick-test.sh Micro HO 1
+# Quick Test Script for CloudSim HO Research
+# This script runs a minimal experiment to verify performance improvements
+# Optimized for 64GB RAM system
 
-if [ $# -ne 3 ]; then
-    echo "Usage: $0 <scenario> <algorithm> <replications>"
-    echo "Scenarios: Micro, Small, Medium, Large, XLarge, Enterprise"
-    echo "Algorithms: HO, FirstFit, GA"
-    echo "Example: $0 Micro HO 1"
-    exit 1
-fi
+echo "=========================================="
+echo "CloudSim HO Research - Quick Performance Test"
+echo "64GB System Optimized Configuration"
+echo "=========================================="
 
-SCENARIO=$1
-ALGORITHM=$2
-REPLICATIONS=$3
+# Set Java options for better performance on 64GB system
+export JAVA_OPTS="-Xmx32g -Xms16g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+UseStringDeduplication"
 
-echo "Running Quick Test - Scenario: $SCENARIO, Algorithm: $ALGORITHM, Replications: $REPLICATIONS"
+echo "Java Options: $JAVA_OPTS"
+echo "Starting quick performance test..."
 
-# Compile first
-mvn compile -q
+# Run the experiment with minimal configuration
+mvn clean compile exec:java -Dexec.mainClass="org.puneet.cloudsimplus.hiippo.App" \
+    -Dexec.args="--quick-test --scenarios=Micro,Small --replications=3" \
+    -Djava.util.logging.config.file=src/main/resources/logback.xml
 
-# Run with Maven exec plugin, overriding the main class
-mvn exec:java -Dexec.mainClass="org.puneet.cloudsimplus.hiippo.simulation.QuickTest" -Dexec.args="$SCENARIO $ALGORITHM $REPLICATIONS" -q 
+echo "Quick test completed!"
+echo "Check results/ directory for output files." 

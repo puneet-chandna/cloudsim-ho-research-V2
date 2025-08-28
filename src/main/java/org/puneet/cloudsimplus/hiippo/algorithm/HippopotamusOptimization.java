@@ -147,6 +147,11 @@ public class HippopotamusOptimization {
             fitnessHistory.add(bestFitness);
             converged = convergenceAnalyzer.checkConvergence(fitnessHistory);
             
+            // CRITICAL FIX: Limit fitness history size to prevent memory leaks
+            if (fitnessHistory.size() > 100) {
+                fitnessHistory.subList(0, fitnessHistory.size() - 100).clear();
+            }
+            
             // Log progress
             if (iteration % 20 == 0 || converged) {
                 logger.info("Iteration {}: Best fitness = {}, Converged = {}", 
@@ -384,8 +389,8 @@ public class HippopotamusOptimization {
             // Ensure fitness is positive and meaningful
             fitness = Math.max(0.1, fitness);
             
-            // Store fitness in history for convergence analysis
-            fitnessHistory.add(fitness);
+            // CRITICAL FIX: Don't add to fitness history here - it's already added in the main loop
+            // fitnessHistory.add(fitness);
             
             logger.debug("Fitness calculation - Resource: {:.4f}, Power: {:.4f}, SLA: {:.4f}, Total: {:.4f}", 
                         resourceUtilization, powerConsumption, slaViolations, fitness);
