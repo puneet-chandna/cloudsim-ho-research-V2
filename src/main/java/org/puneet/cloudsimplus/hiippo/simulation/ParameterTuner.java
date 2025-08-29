@@ -1109,8 +1109,8 @@ public class ParameterTuner {
             .limit(topN)
             .forEach(entry -> {
                 if (entry.getKey() != null) {
-                    logger.info("  Parameters: {}, Score: {:.4f}", 
-                        entry.getKey(), entry.getValue().getOverallScore());
+                    logger.info("  Parameters: {}, Score: {}",
+                        entry.getKey().toString(), String.format("%.4f", entry.getValue().getOverallScore()));
                 }
             });
     }
@@ -1139,8 +1139,8 @@ public class ParameterTuner {
         double range = maxScore - minScore;
         double relativeImpact = (minScore > 0) ? (range / minScore * 100) : 0.0;
         
-        logger.info("Parameter {} impact: {:.2f}% (range: {:.4f} - {:.4f})",
-            parameterName, relativeImpact, minScore, maxScore);
+        logger.info("Parameter {} impact: {}% (range: {} - {})",
+            parameterName, String.format("%.2f", relativeImpact), String.format("%.4f", minScore), String.format("%.4f", maxScore));
     }
     
     /**

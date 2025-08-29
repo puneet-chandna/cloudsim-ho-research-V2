@@ -153,9 +153,10 @@ public class HODatacenterBroker extends DatacenterBrokerSimple {
             totalSubmissionTime = endTime - startTime;
             
             org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor.PerformanceMetrics metrics = performanceMonitor.stopMonitoring();
-            logger.info("VM submission completed in {} ms, CPU usage: {:.2f}%, Memory usage: {} MB",
-                totalSubmissionTime, metrics.getAvgCpuUsage(), 
-                metrics.getPeakMemoryUsage() / (1024 * 1024));
+            String cpuPct = String.format("%.2f", metrics.getAvgCpuUsage());
+            long memMb = metrics.getPeakMemoryUsage() / (1024 * 1024);
+            logger.info("VM submission completed in {} ms, CPU usage: {}%, Memory usage: {} MB",
+                totalSubmissionTime, cpuPct, memMb);
         }
         
         return this;
@@ -309,12 +310,12 @@ public class HODatacenterBroker extends DatacenterBrokerSimple {
      */
     private void logSubmissionSummary() {
         int total = vmSubmissionOrder.size();
-        int successful = successfulAllocations.get();
-        int failed = failedAllocations.get();
-        
-        logger.info("VM Submission Summary: Total={}, Successful={}, Failed={}, Success Rate={:.2f}%",
-            total, successful, failed, 
-            total > 0 ? (successful * 100.0 / total) : 0);
+        // Prefer authoritative broker lists to ensure correctness even if callbacks aren't invoked
+        int successful = getVmCreatedList().size();
+        int failed = getVmFailedList().size();
+        String rate = String.format("%.2f", total > 0 ? (successful * 100.0 / total) : 0.0);
+        logger.info("VM Submission Summary: Total={}, Successful={}, Failed={}, Success Rate={}%%",
+            total, successful, failed, rate);
     }
     
     /**
@@ -436,9 +437,9 @@ public class HODatacenterBroker extends DatacenterBrokerSimple {
         logger.info("Successful allocations: {}", successfulAllocations.get());
         logger.info("Failed allocations: {}", failedAllocations.get());
         logger.info("Total submission time: {} ms", totalSubmissionTime);
-        logger.info("Average allocation time: {:.2f} ms/VM", 
-            vmSubmissionOrder.isEmpty() ? 0 : 
+        String avgAllocMs = String.format("%.2f", vmSubmissionOrder.isEmpty() ? 0.0 :
             (double) totalSubmissionTime / vmSubmissionOrder.size());
+        logger.info("Average allocation time: {} ms/VM", avgAllocMs);
         logger.info("=========================================");
     }
     

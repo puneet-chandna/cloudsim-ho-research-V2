@@ -50,6 +50,15 @@ public class RunManager {
         // Set MDC for logging context
         MDC.put("run.id", runId);
         
+        // Ensure run-specific directories exist early so logging can target them
+        createRunDirectories();
+
+        // Expose run-specific logs directory to logging configuration
+        // Logback picks up this system property (${run.logs.dir}) to route file appenders
+        System.setProperty("run.logs.dir", runLogsPath.toString());
+        // Also expose run id for any config using ${run.id}
+        System.setProperty("run.id", runId);
+        
         logger.info("RunManager initialized with Run ID: {}", runId);
     }
     

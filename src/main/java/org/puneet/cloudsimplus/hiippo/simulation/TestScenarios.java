@@ -293,21 +293,26 @@ public class TestScenarios {
         for (int i = 0; i < vms.size(); i++) {
             Vm vm = vms.get(i);
             
-            // CRITICAL FIX: Create much longer cloudlets to ensure meaningful resource utilization
-            // Use a multiplier that ensures cloudlets run for a significant amount of simulation time
-            long baseLength = (long) (vm.getMips() * 10000000); // Increased to 10M for much longer execution
-            long length = baseLength + random.nextInt((int)(baseLength * 0.5)); // Add some randomness
+            // OPTIMIZED: Create longer cloudlets for better power consumption and resource utilization patterns
+            // Increased multiplier to show more realistic power variations while keeping simulation time reasonable
+            long baseLength = (long) (vm.getMips() * 25000000); // Increased to 25M for better power patterns
+            long length = baseLength + random.nextInt((int)(baseLength * 0.3)); // Add 30% randomness for variation
             
             // Ensure minimum length to prevent instant completion
-            length = Math.max(length, 1000000); // At least 1M instructions
+            length = Math.max(length, 5000000); // At least 5M instructions for meaningful execution
             
-            // Create cloudlet with full resource utilization
+            // Create cloudlet with varied resource utilization for more realistic power patterns
+            // Add some variation to CPU, RAM, and bandwidth utilization to simulate real workloads
+            double cpuUtilization = 0.8 + (random.nextDouble() * 0.2); // 80-100% CPU
+            double ramUtilization = 0.7 + (random.nextDouble() * 0.3); // 70-100% RAM  
+            double bwUtilization = 0.6 + (random.nextDouble() * 0.4);  // 60-100% Bandwidth
+            
             Cloudlet cloudlet = new CloudletSimple(i, length, (int) vm.getPesNumber())
                 .setFileSize(10000)  // Increased file size for more realistic I/O
                 .setOutputSize(10000) // Increased output size
-                .setUtilizationModelCpu(new UtilizationModelFull())  // Use 100% CPU
-                .setUtilizationModelRam(new UtilizationModelFull())  // Use 100% RAM
-                .setUtilizationModelBw(new UtilizationModelFull());  // Use 100% bandwidth
+                .setUtilizationModelCpu(new UtilizationModelDynamic(cpuUtilization))  // Varied CPU usage
+                .setUtilizationModelRam(new UtilizationModelDynamic(ramUtilization))  // Varied RAM usage
+                .setUtilizationModelBw(new UtilizationModelDynamic(bwUtilization));   // Varied bandwidth usage
             
             cloudlets.add(cloudlet);
             
@@ -350,8 +355,8 @@ public class TestScenarios {
         }
         
         double capacityRatio = totalHostMips / totalVmMips;
-        logger.info("Scenario {} capacity ratio: {:.2f} (Host/VM MIPS)", 
-            scenarioName, capacityRatio);
+        logger.info("Scenario {} capacity ratio: {} (Host/VM MIPS)", 
+            scenarioName, String.format("%.2f", capacityRatio));
         
         // Validate individual components
         for (Vm vm : vms) {

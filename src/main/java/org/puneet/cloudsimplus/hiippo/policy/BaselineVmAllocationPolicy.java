@@ -488,9 +488,9 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
             long availableMips = (long) host.getTotalAvailableMips();
             long availableRam = (long) host.getRam().getAvailableResource();
             
-            logger.debug("Host {} utilization - CPU: {:.2f}%, RAM: {:.2f}%, " +
+            logger.debug("Host {} utilization - CPU: {}%, RAM: {}%, " +
                 "Available MIPS: {}, Available RAM: {}", 
-                host.getId(), cpuUtilization, ramUtilization, 
+                host.getId(), String.format("%.2f", cpuUtilization), String.format("%.2f", ramUtilization), 
                 availableMips, availableRam);
                 
         } catch (Exception e) {

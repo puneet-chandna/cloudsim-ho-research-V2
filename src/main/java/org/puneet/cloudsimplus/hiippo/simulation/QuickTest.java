@@ -56,10 +56,10 @@ public class QuickTest {
                 
                 logger.info("Replication {} completed:", i + 1);
                 logger.info("  - VMs Allocated: {}/{}", result.getVmAllocated(), result.getVmTotal());
-                logger.info("  - CPU Utilization: {:.2f}%", result.getResourceUtilizationCPU() * 100);
-                logger.info("  - RAM Utilization: {:.2f}%", result.getResourceUtilizationRAM() * 100);
-                logger.info("  - Execution Time: {:.2f}s", result.getExecutionTime());
-                logger.info("  - Power Consumption: {:.2f}W", result.getPowerConsumption());
+                logger.info("  - CPU Utilization: {}%", String.format("%.2f", result.getResourceUtilizationCPU() * 100));
+                logger.info("  - RAM Utilization: {}%", String.format("%.2f", result.getResourceUtilizationRAM() * 100));
+                logger.info("  - Execution Time: {}s", String.format("%.2f", result.getExecutionTime()));
+                logger.info("  - Power Consumption: {}W", String.format("%.2f", result.getPowerConsumption()));
                 logger.info("  - SLA Violations: {}", result.getSlaViolations());
             }
             

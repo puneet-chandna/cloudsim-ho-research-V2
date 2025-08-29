@@ -287,7 +287,25 @@ public final class MemoryManager {
      * @param hostCount Number of hosts in the scenario
      * @return true if enough memory is available, false otherwise
      */
+    // Rate limiting for memory checks to prevent excessive logging
+    private static final long MEMORY_CHECK_INTERVAL = 5000; // 5 seconds
+    private static long lastMemoryCheckTime = 0;
+    private static String lastMemoryCheckKey = "";
+    
     public static boolean hasEnoughMemoryForScenario(int vmCount, int hostCount) {
+        // Rate limiting to prevent excessive memory checks
+        String checkKey = vmCount + "_" + hostCount;
+        long currentTime = System.currentTimeMillis();
+        
+        if (currentTime - lastMemoryCheckTime < MEMORY_CHECK_INTERVAL && 
+            lastMemoryCheckKey.equals(checkKey)) {
+            // Skip logging if we checked the same scenario recently
+            return true; // Assume memory is still sufficient
+        }
+        
+        lastMemoryCheckTime = currentTime;
+        lastMemoryCheckKey = checkKey;
+        
         // Conservative memory estimation per VM and host
         long estimatedMemoryPerVm = 1024 * 1024; // 1MB per VM (objects, references, etc.)
         long estimatedMemoryPerHost = 512 * 1024; // 512KB per host
@@ -307,7 +325,7 @@ public final class MemoryManager {
         
         boolean hasEnoughMemory = availableHeap >= requiredMemory;
         
-        logger.info("Memory check for scenario ({} VMs, {} hosts): Estimated: {}MB, Available: {}MB, Required: {}MB, HasEnough: {}",
+        logger.debug("Memory check for scenario ({} VMs, {} hosts): Estimated: {}MB, Available: {}MB, Required: {}MB, HasEnough: {}",
                    vmCount, hostCount, 
                    totalEstimatedMemory / (1024 * 1024),
                    availableHeap / (1024 * 1024),
@@ -340,14 +358,14 @@ public final class MemoryManager {
         updateMemoryStats();
         
         if (currentMemoryUsage >= WARNING_THRESHOLD) {
-            logger.warn("High memory usage during {}: {:.1f}% (Peak: {:.1f}%)",
-                phase, currentMemoryUsage * 100, peakMemoryUsage * 100);
+            logger.warn("High memory usage during {}: {}% (Peak: {}%)",
+                phase, String.format("%.1f", currentMemoryUsage * 100), String.format("%.1f", peakMemoryUsage * 100));
             
             if (currentMemoryUsage >= BATCH_REDUCTION_THRESHOLD) {
                 logger.warn("Consider reducing batch size for memory optimization");
             }
         } else {
-            logger.debug("Memory usage during {}: {:.1f}%", phase, currentMemoryUsage * 100);
+            logger.debug("Memory usage during {}: {}%", phase, String.format("%.1f", currentMemoryUsage * 100));
         }
     }
     
@@ -377,8 +395,8 @@ public final class MemoryManager {
         }
         
         if (optimizedSize != requestedSize) {
-            logger.info("Batch size optimized: {} -> {} (memory: {:.1f}%)",
-                requestedSize, optimizedSize, currentMemoryUsage * 100);
+            logger.info("Batch size optimized: {} -> {} (memory: {}%)",
+                requestedSize, optimizedSize, String.format("%.1f", currentMemoryUsage * 100));
         }
         
         return optimizedSize;
@@ -445,8 +463,8 @@ public final class MemoryManager {
         }
         
         updateMemoryStats();
-        logger.error("Emergency cleanup completed - memory usage: {:.1f}%", 
-            currentMemoryUsage * 100);
+        logger.error("Emergency cleanup completed - memory usage: {}%", 
+            String.format("%.1f", currentMemoryUsage * 100));
     }
     
     // ===================================================================================
@@ -464,11 +482,11 @@ public final class MemoryManager {
         MemoryUsage heapUsage = MEMORY_BEAN.getHeapMemoryUsage();
         MemoryUsage nonHeapUsage = MEMORY_BEAN.getNonHeapMemoryUsage();
         
-        logger.info("Memory State [{}]: Heap={}/{} MB ({:.1f}%), Non-Heap={}/{} MB, GC={} ({} ms)",
+        logger.info("Memory State [{}]: Heap={}/{} MB ({}%), Non-Heap={}/{} MB, GC={} ({} ms)",
             context,
             heapUsage.getUsed() / (1024 * 1024),
             heapUsage.getMax() / (1024 * 1024),
-            currentMemoryUsage * 100,
+            String.format("%.1f", currentMemoryUsage * 100),
             nonHeapUsage.getUsed() / (1024 * 1024),
             nonHeapUsage.getMax() / (1024 * 1024),
             gcCount,
@@ -482,11 +500,11 @@ public final class MemoryManager {
         updateMemoryStats();
         
         logger.info("=== Final Memory Statistics ===");
-        logger.info("Peak Memory Usage: {:.1f}%", peakMemoryUsage * 100);
+        logger.info("Peak Memory Usage: {}%", String.format("%.1f", peakMemoryUsage * 100));
         logger.info("Garbage Collections: {}", gcCount);
         logger.info("Total GC Time: {} ms", gcTime);
         logger.info("Average GC Time: {} ms", gcCount > 0 ? gcTime / gcCount : 0);
-        logger.info("Final Memory Usage: {:.1f}%", currentMemoryUsage * 100);
+        logger.info("Final Memory Usage: {}%", String.format("%.1f", currentMemoryUsage * 100));
     }
     
     /**
@@ -519,8 +537,8 @@ public final class MemoryManager {
     public static void trackAllocation(long bytes, String description) {
         if (logger.isDebugEnabled()) {
             updateMemoryStats();
-            logger.debug("Allocating {} MB for {} (current usage: {:.1f}%)",
-                bytes / (1024 * 1024), description, currentMemoryUsage * 100);
+            logger.debug("Allocating {} MB for {} (current usage: {}%)",
+                bytes / (1024 * 1024), description, String.format("%.1f", currentMemoryUsage * 100));
         }
     }
     
@@ -533,8 +551,8 @@ public final class MemoryManager {
     public static void trackDeallocation(long bytes, String description) {
         if (logger.isDebugEnabled()) {
             updateMemoryStats();
-            logger.debug("Deallocating {} MB for {} (current usage: {:.1f}%)",
-                bytes / (1024 * 1024), description, currentMemoryUsage * 100);
+            logger.debug("Deallocating {} MB for {} (current usage: {}%)",
+                bytes / (1024 * 1024), description, String.format("%.1f", currentMemoryUsage * 100));
         }
     }
 }

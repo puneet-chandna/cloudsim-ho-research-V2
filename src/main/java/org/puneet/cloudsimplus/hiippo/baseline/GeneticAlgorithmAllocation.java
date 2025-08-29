@@ -301,8 +301,8 @@ public class GeneticAlgorithmAllocation extends BaselineVmAllocationPolicy {
         optimizationEndTime = System.currentTimeMillis();
         optimizationTime = optimizationEndTime - optimizationStartTime;
         
-        logger.info("GA: Completed {} generations in {:.2f}ms. Best fitness: {}", 
-                   convergenceIterations, optimizationTime, bestSolution.getFitness());
+        logger.info("GA: Completed {} generations in {}ms. Best fitness: {}",
+            convergenceIterations, String.format("%.2f", optimizationTime), bestSolution.getFitness());
         
         return bestSolution;
     }

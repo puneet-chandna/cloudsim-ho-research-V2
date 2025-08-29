@@ -392,8 +392,8 @@ public class HippopotamusOptimization {
             // CRITICAL FIX: Don't add to fitness history here - it's already added in the main loop
             // fitnessHistory.add(fitness);
             
-            logger.debug("Fitness calculation - Resource: {:.4f}, Power: {:.4f}, SLA: {:.4f}, Total: {:.4f}", 
-                        resourceUtilization, powerConsumption, slaViolations, fitness);
+            logger.debug("Fitness calculation - Resource: {}, Power: {}, SLA: {}, Total: {}",
+                String.format("%.4f", resourceUtilization), String.format("%.4f", powerConsumption), String.format("%.4f", slaViolations), String.format("%.4f", fitness));
             
             return fitness;
             

@@ -416,13 +416,13 @@ public class PerformanceMonitor {
         if (snapshot.heapMax > 0) {
             double heapUtilization = (double) snapshot.heapUsed / snapshot.heapMax;
             if (heapUtilization > 0.9) {
-                logger.warn("High heap utilization: {:.2f}%", heapUtilization * 100);
+                logger.warn("High heap utilization: {}%", String.format("%.2f", heapUtilization * 100));
             }
         }
         
         // Check CPU usage
         if (snapshot.cpuUsage > CPU_WARNING_THRESHOLD) {
-            logger.warn("High CPU usage detected: {:.2f}%", snapshot.cpuUsage * 100);
+            logger.warn("High CPU usage detected: {}%", String.format("%.2f", snapshot.cpuUsage * 100));
         }
         
         // Check for deadlocks

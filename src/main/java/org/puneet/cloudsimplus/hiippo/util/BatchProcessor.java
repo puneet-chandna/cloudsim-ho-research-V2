@@ -301,13 +301,10 @@ public class BatchProcessor {
      * @param processed the number of items processed
      * @param total the total number of items
      */
-    private static void logProgress(int processed, int total) {
-        if (total > 0) {
-            double percentage = (processed * 100.0) / total;
-            if (processed % 50 == 0 || percentage >= 100) {
-                logger.info("Progress: {}/{} items processed ({:.1f}%)", 
-                    processed, total, percentage);
-            }
+    private static void logProgress(int processedCount, int totalItems) {
+        if (totalItems > 0) {
+            logger.info("Progress: {}/{} items processed ({}%)",
+                processedCount, totalItems, String.format("%.1f", (processedCount * 100.0 / totalItems)));
         }
     }
     

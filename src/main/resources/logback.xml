@@ -26,9 +26,9 @@
     
     <!-- File Appender for Detailed Logs -->
     <appender name="DETAILED_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/cloudsim-ho-detailed.log</file>
+        <file>${run.logs.dir:-logs}/cloudsim-ho-detailed.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/cloudsim-ho-detailed-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${run.logs.dir:-logs}/cloudsim-ho-detailed-%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
@@ -39,7 +39,7 @@
     
     <!-- Run-specific Log File Appender -->
     <appender name="RUN_LOG" class="ch.qos.logback.core.FileAppender">
-        <file>logs/run-${run.id:-default}.log</file>
+        <file>${run.logs.dir:-logs}/run-${run.id:-default}.log</file>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
         </encoder>
@@ -47,7 +47,7 @@
     
     <!-- Error File Appender -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/errors.log</file>
+        <file>${run.logs.dir:-logs}/errors.log</file>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>ERROR</level>
         </filter>
@@ -58,9 +58,9 @@
     
     <!-- Memory Monitor Appender -->
     <appender name="MEMORY" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/memory-usage.log</file>
+        <file>${run.logs.dir:-logs}/memory-usage.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/memory-usage-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${run.logs.dir:-logs}/memory-usage-%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>7</maxHistory>
         </rollingPolicy>
         <encoder>
@@ -70,7 +70,7 @@
     
     <!-- Performance Metrics Appender -->
     <appender name="PERFORMANCE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/performance-metrics.log</file>
+        <file>${run.logs.dir:-logs}/performance-metrics.log</file>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
         </encoder>
@@ -100,7 +100,7 @@
     </logger>
     
     <!-- Specialized Loggers -->
-    <logger name="org.puneet.cloudsimplus.hiippo.util.MemoryManager" level="INFO" additivity="false">
+    <logger name="org.puneet.cloudsimplus.hiippo.util.MemoryManager" level="WARN" additivity="false">
         <appender-ref ref="MEMORY"/>
         <appender-ref ref="DETAILED_FILE"/>
         <appender-ref ref="RUN_LOG"/>

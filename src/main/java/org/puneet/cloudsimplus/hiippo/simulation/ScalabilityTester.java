@@ -216,7 +216,7 @@ public class ScalabilityTester {
         // Use correct static method for MemoryManager.getCurrentMemoryUsage()
         double currentUsage = MemoryManager.getCurrentMemoryUsage();
         if (currentUsage > MEMORY_USAGE_WARNING_THRESHOLD) {
-            logger.warn("Current memory usage too high: {:.2f}%", currentUsage * 100);
+            logger.warn("Current memory usage too high: {}%", String.format("%.2f", currentUsage * 100));
             return false;
         }
         // Check if we have enough memory for the scenario
@@ -375,8 +375,8 @@ public class ScalabilityTester {
         // Weighted average with emphasis on resource utilization
         double qualityScore = 0.4 * utilization + 0.3 * slaScore + 0.3 * powerScore;
         
-        logger.debug("Solution quality calculation - Utilization: {:.2f}, SLA: {:.2f}, Power: {:.2f}, Quality: {:.2f}", 
-            utilization, slaScore, powerScore, qualityScore);
+        logger.debug("Solution quality calculation - Utilization: {}, SLA: {}, Power: {}, Quality: {}",
+            String.format("%.2f", utilization), String.format("%.2f", slaScore), String.format("%.2f", powerScore), String.format("%.2f", qualityScore));
         
         return qualityScore;
     }
@@ -460,9 +460,9 @@ public class ScalabilityTester {
             testResult.setQualityDegradationRate(qualityDegradationRate);
             
             // Log analysis results
-            logger.info("Scalability Analysis - Time Complexity: O(n^{:.2f}), " +
-                "Quality Degradation Rate: {:.4f}",
-                timeComplexityCoefficient, qualityDegradationRate);
+            logger.info("Scalability Analysis - Time Complexity: O(n^{}), " +
+                "Quality Degradation Rate: {}",
+                String.format("%.2f", timeComplexityCoefficient), String.format("%.4f", qualityDegradationRate));
             
         } catch (Exception e) {
             logger.error("Error analyzing scalability trends", e);

@@ -282,14 +282,20 @@ public class ExperimentRunner implements AutoCloseable {
                             totalRamUtil += ramUtil;
                             activeHosts++;
                             
-                            logger.debug("Host {} at time {}: CPU={:.2f}%, RAM={:.2f}%, VMs={}", 
-                                host.getId(), currentTime, cpuUtil * 100, ramUtil * 100, host.getVmList().size());
+                            logger.debug("Host {} at time {}: CPU={}%, RAM={}%, VMs={}", 
+                                host.getId(), currentTime,
+                                String.format("%.2f", cpuUtil * 100),
+                                String.format("%.2f", ramUtil * 100),
+                                host.getVmList().size());
                         }
                     }
                     
                     if (activeHosts > 0) {
-                        logger.debug("Average utilization at time {}: CPU={:.2f}%, RAM={:.2f}%, Active hosts: {}", 
-                            currentTime, (totalCpuUtil / activeHosts) * 100, (totalRamUtil / activeHosts) * 100, activeHosts);
+                        logger.debug("Average utilization at time {}: CPU={}%, RAM={}%, Active hosts: {}", 
+                            currentTime,
+                            String.format("%.2f", (totalCpuUtil / activeHosts) * 100),
+                            String.format("%.2f", (totalRamUtil / activeHosts) * 100),
+                            activeHosts);
                     }
                 }
                 
@@ -421,8 +427,10 @@ public class ExperimentRunner implements AutoCloseable {
                     ramUtil = Math.min(1.0, Math.max(0.0, ramUtil));
                     hostRamUtilizationSamples.get(host).add(ramUtil);
                     
-                    logger.debug("Manual sampling - Host {}: CPU={:.2f}%, RAM={:.2f}%", 
-                        host.getId(), cpuUtil * 100, ramUtil * 100);
+                    logger.debug("Manual sampling - Host {}: CPU={}%, RAM={}%", 
+                        host.getId(),
+                        String.format("%.2f", cpuUtil * 100),
+                        String.format("%.2f", ramUtil * 100));
                 }
                 
                 totalCpuSamples = hostCpuUtilizationSamples.values().stream().mapToInt(List::size).sum();
@@ -432,8 +440,12 @@ public class ExperimentRunner implements AutoCloseable {
             }
             
             // Debug: Log final simulation state
+            double safeTime = simulation.clock();
+            if (Double.isInfinite(safeTime) || Double.isNaN(safeTime) || safeTime >= Double.MAX_VALUE / 2) {
+                safeTime = 0.0; // fallback if simulator returned invalid time
+            }
             logger.info("Final simulation state - time: {}, running: {}", 
-                simulation.clock(), simulation.isRunning());
+                safeTime, simulation.isRunning());
             
         } catch (Exception e) {
             cancelProgressTask(progressTask);
@@ -838,8 +850,8 @@ public class ExperimentRunner implements AutoCloseable {
                     totalCpuSamples += cpuSamples.size();
                     activeHosts++;
                     
-                    logger.debug("Host {} CPU utilization samples: {} (avg: {:.2f}%)", 
-                        host.getId(), cpuSamples.size(), hostAvgCpuUtil * 100);
+                    logger.debug("Host {} CPU utilization samples: {} (avg: {}%)", 
+                        host.getId(), cpuSamples.size(), String.format("%.2f", hostAvgCpuUtil * 100));
                 }
                 
                 if (ramSamples != null && !ramSamples.isEmpty()) {
@@ -847,8 +859,8 @@ public class ExperimentRunner implements AutoCloseable {
                     ramUtilization += hostAvgRamUtil;
                     totalRamSamples += ramSamples.size();
                     
-                    logger.debug("Host {} RAM utilization samples: {} (avg: {:.2f}%)", 
-                        host.getId(), ramSamples.size(), hostAvgRamUtil * 100);
+                    logger.debug("Host {} RAM utilization samples: {} (avg: {}%)", 
+                        host.getId(), ramSamples.size(), String.format("%.2f", hostAvgRamUtil * 100));
                 }
             }
             
@@ -860,8 +872,8 @@ public class ExperimentRunner implements AutoCloseable {
             logger.info("  Active Hosts: {}", activeHosts);
             logger.info("  Total CPU Samples: {}", totalCpuSamples);
             logger.info("  Total RAM Samples: {}", totalRamSamples);
-            logger.info("  Average CPU Utilization: {:.2f}%", cpuUtilization * 100);
-            logger.info("  Average RAM Utilization: {:.2f}%", ramUtilization * 100);
+            logger.info("  Average CPU Utilization: {}%", String.format("%.2f", cpuUtilization * 100));
+            logger.info("  Average RAM Utilization: {}%", String.format("%.2f", ramUtilization * 100));
             
             // If no samples were collected, fall back to end-of-simulation calculation
             if (totalCpuSamples == 0) {
@@ -952,12 +964,12 @@ public class ExperimentRunner implements AutoCloseable {
                 totalUtilization += hostUtil;
                 activeHosts++;
                 
-                logger.debug("Host {} CPU utilization: {:.2f}%", host.getId(), hostUtil * 100);
+                logger.debug("Host {} CPU utilization: {}%", host.getId(), String.format("%.2f", hostUtil * 100));
             }
         }
         
         double avgUtil = activeHosts > 0 ? totalUtilization / activeHosts : 0.0;
-        logger.info("Fallback CPU utilization: {:.2f}% (from {} active hosts)", avgUtil * 100, activeHosts);
+        logger.info("Fallback CPU utilization: {}% (from {} active hosts)", String.format("%.2f", avgUtil * 100), activeHosts);
         
         return avgUtil;
     }
@@ -983,12 +995,12 @@ public class ExperimentRunner implements AutoCloseable {
                 totalUtilization += hostUtil;
                 activeHosts++;
                 
-                logger.debug("Host {} RAM utilization: {:.2f}%", host.getId(), hostUtil * 100);
+                logger.debug("Host {} RAM utilization: {}%", host.getId(), String.format("%.2f", hostUtil * 100));
             }
         }
         
         double avgUtil = activeHosts > 0 ? totalUtilization / activeHosts : 0.0;
-        logger.info("Fallback RAM utilization: {:.2f}% (from {} active hosts)", avgUtil * 100, activeHosts);
+        logger.info("Fallback RAM utilization: {}% (from {} active hosts)", String.format("%.2f", avgUtil * 100), activeHosts);
         
         return avgUtil;
     }
@@ -1024,6 +1036,22 @@ public class ExperimentRunner implements AutoCloseable {
         // The broker's getVmCreatedList() contains VMs that were successfully allocated
         int totalVms = broker.getVmCreatedList().size() + broker.getVmFailedList().size();
         int allocatedVms = broker.getVmCreatedList().size(); // VMs that were successfully allocated
+        
+        // DEBUG: Log VM allocation details
+        logger.info("DEBUG: VM Allocation Details - Created: {}, Failed: {}, Total: {}", 
+                   broker.getVmCreatedList().size(), broker.getVmFailedList().size(), totalVms);
+        
+        // If no VMs were created or failed, check if VMs were submitted at all
+        if (totalVms == 0) {
+            logger.warn("DEBUG: No VMs found in broker lists. Checking scenario VM count...");
+            // Fallback to scenario VM count if broker lists are empty
+            Map<String, int[]> scenarioSpecs = ExperimentConfig.getScenarioSpecifications();
+            int expectedVms = scenarioSpecs.containsKey(scenarioName) ? scenarioSpecs.get(scenarioName)[0] : 0;
+            totalVms = expectedVms;
+            allocatedVms = 0; // Assume none allocated if broker lists are empty
+            logger.warn("DEBUG: Using scenario VM count as fallback: {} (expected: {})", totalVms, expectedVms);
+        }
+        
         result.setVmAllocated(allocatedVms);
         result.setVmTotal(totalVms);
         

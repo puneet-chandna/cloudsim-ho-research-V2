@@ -344,8 +344,8 @@ public class StatisticalValidator {
         int m = pValuePairs.size();
         double correctedAlpha = SIGNIFICANCE_LEVEL / m;
         
-        logger.info("Applying Bonferroni correction: m={}, corrected alpha={:.6f}", 
-            m, correctedAlpha);
+        logger.info("Applying Bonferroni correction: m={}, corrected alpha={}", 
+            m, String.format("%.6f", correctedAlpha));
         
         for (PValuePair pair : pValuePairs) {
             pair.adjustedPValue = Math.min(1.0, pair.rawPValue * m);
@@ -523,12 +523,12 @@ public class StatisticalValidator {
         logger.info("Multiple Comparison Summary for {}:", result.getMetric());
         logger.info("  Correction Method: {}", correctionMethod.getDisplayName());
         logger.info("  Total Comparisons: {}", totalComparisons);
-        logger.info("  Significant before correction: {} ({:.1f}%)", 
+        logger.info("  Significant before correction: {} ({}%)", 
             significantBeforeCorrection, 
-            100.0 * significantBeforeCorrection / totalComparisons);
-        logger.info("  Significant after correction: {} ({:.1f}%)", 
+            String.format("%.1f", 100.0 * significantBeforeCorrection / totalComparisons));
+        logger.info("  Significant after correction: {} ({}%)", 
             significantAfterCorrection,
-            100.0 * significantAfterCorrection / totalComparisons);
+            String.format("%.1f", 100.0 * significantAfterCorrection / totalComparisons));
         logger.info("  Family-wise error rate controlled at: {}", SIGNIFICANCE_LEVEL);
     }
     
@@ -574,8 +574,8 @@ public class StatisticalValidator {
             DescriptiveStatistics stats2 = new DescriptiveStatistics(data2);
             result.setMeanDifference(stats1.getMean() - stats2.getMean());
             
-            logger.debug("Raw comparison {} vs {}: p={:.4f}, d={:.4f}", 
-                algo1, algo2, pValue, effectSize);
+            logger.debug("Raw comparison {} vs {}: p={}, d={}", 
+                algo1, algo2, String.format("%.4f", pValue), String.format("%.4f", effectSize));
             
         } catch (Exception e) {
             logger.error("Error comparing {} vs {}: {}", algo1, algo2, e.getMessage());

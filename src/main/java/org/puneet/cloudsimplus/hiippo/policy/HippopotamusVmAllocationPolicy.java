@@ -539,8 +539,10 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                         AlgorithmConstants.W_POWER * powerScore +
                         AlgorithmConstants.W_SLA * balanceScore;
         
-        logger.trace("Host {} fitness for VM {}: {} (CPU: {:.2f}, RAM: {:.2f})", 
-            host.getId(), vm.getId(), fitness, newCpuUtil, newRamUtil);
+        logger.trace("Host {} fitness for VM {}: {} (CPU: {}, RAM: {})", 
+            host.getId(), vm.getId(), fitness,
+            String.format("%.2f", newCpuUtil),
+            String.format("%.2f", newRamUtil));
         
         return fitness;
     }
@@ -590,10 +592,10 @@ public class HippopotamusVmAllocationPolicy extends VmAllocationPolicyAbstract {
                 hostVmMap.computeIfAbsent(host, k -> new ArrayList<>()).add(vm);
                 
                 // Log successful allocation
-                logger.info("Successfully allocated VM {} to Host {} (CPU: {:.2f}%, RAM: {:.2f}%)", 
+                logger.info("Successfully allocated VM {} to Host {} (CPU: {}%, RAM: {}%)", 
                     vm.getId(), host.getId(), 
-                    host.getCpuPercentUtilization() * 100, 
-                    host.getRam().getAllocatedResource() / (double) host.getRam().getCapacity() * 100);
+                    String.format("%.2f", host.getCpuPercentUtilization() * 100), 
+                    String.format("%.2f", host.getRam().getAllocatedResource() / (double) host.getRam().getCapacity() * 100));
                 
                 // Collect metrics
                 // metricsCollector.recordVmAllocation(vm, host); // Method does not exist

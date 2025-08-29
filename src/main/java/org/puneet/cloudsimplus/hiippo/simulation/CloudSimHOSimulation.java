@@ -963,12 +963,15 @@ public class CloudSimHOSimulation {
      */
     private int calculateSLAViolations() {
         int violations = 0;
+        int failedAllocations = 0;
+        int performanceViolations = 0;
+        int cloudletViolations = 0;
 
-        // 1. Count VMs that failed to be allocated
-        int failedToAllocate = vmList.size() - countAllocatedVms();
-        violations += failedToAllocate;
+        // 1. Count VMs that failed to be allocated (these are NOT SLA violations)
+        failedAllocations = vmList.size() - countAllocatedVms();
+        logger.info("DEBUG: Failed allocations: {} (not counted as SLA violations)", failedAllocations);
 
-        // 2. Check for runtime performance degradation (logic from V2)
+        // 2. Check for runtime performance degradation (actual SLA violations)
         for (Vm vm : vmList) {
             // Only check VMs that were successfully placed
             if (vm.getHost() != null && vm.getHost() != Host.NULL) {
@@ -984,7 +987,9 @@ public class CloudSimHOSimulation {
                 }
                 // If the VM receives less than 95% of its requested CPU, count as a violation
                 if (allocatedMips < requestedMips * 0.95) {
-                    violations++;
+                    performanceViolations++;
+                    logger.debug("DEBUG: Performance SLA violation for VM {}: allocated {} < requested {} * 0.95", 
+                               vm.getId(), allocatedMips, requestedMips);
                 }
             }
         }
@@ -992,9 +997,17 @@ public class CloudSimHOSimulation {
         // 3. Check for cloudlet execution failures
         for (Cloudlet cloudlet : broker.getCloudletFinishedList()) {
             if (cloudlet.getStatus() != Cloudlet.Status.SUCCESS) {
-                violations++;
+                cloudletViolations++;
+                logger.debug("DEBUG: Cloudlet SLA violation for Cloudlet {}: status {}", 
+                           cloudlet.getId(), cloudlet.getStatus());
             }
         }
+
+        violations = performanceViolations + cloudletViolations;
+        
+        logger.info("DEBUG: SLA Violations breakdown - Performance: {}, Cloudlet: {}, Total: {}", 
+                   performanceViolations, cloudletViolations, violations);
+        logger.info("DEBUG: Allocation failures: {} (not SLA violations)", failedAllocations);
 
         return violations;
     }

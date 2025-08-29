@@ -328,8 +328,8 @@ public class ComparisonAnalyzer {
                 
                 anovaResults.put(metric, result);
                 
-                logger.info("ANOVA for {}: F={:.4f}, p={:.4f}, significant={}", 
-                    metric, fStatistic, pValue, significant);
+                logger.info("ANOVA for {}: F={}, p={}, significant={}",
+                    metric, String.format("%.4f", fStatistic), String.format("%.4f", pValue), significant);
                 
             } catch (Exception e) {
                 logger.error("ANOVA failed for metric: {}", metric, e);
@@ -453,9 +453,8 @@ public class ComparisonAnalyzer {
                 comparison.setEffectSize(cohensD);
                 comparison.setEffectSizeMagnitude(interpretEffectSize(cohensD));
                 
-                logger.debug("{} - {}: Cohen's d = {:.3f} ({})", 
-                    entry.getKey(), comparison.getMetric(), 
-                    cohensD, comparison.getEffectSizeMagnitude());
+                logger.debug("{} - {}: Cohen's d = {} ({})", 
+                    entry.getKey(), comparison.getMetric(), String.format("%.3f", cohensD), comparison.getEffectSizeMagnitude());
             }
         }
     }

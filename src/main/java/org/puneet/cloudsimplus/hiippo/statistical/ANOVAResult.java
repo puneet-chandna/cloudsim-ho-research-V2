@@ -100,8 +100,8 @@ public class ANOVAResult {
         this.postHocResults = new HashMap<>();
         this.computationTimeMs = computationTimeMs;
         
-        logger.info("ANOVA Result created for {}: F({},{})={:.3f}, p={:.4f}, significant={}",
-            metricName, dfBetween, dfWithin, fStatistic, pValue, isSignificant);
+        logger.info("ANOVA Result created for {}: F({},{})={}, p={}, significant={}",
+            metricName, dfBetween, dfWithin, String.format("%.3f", fStatistic), String.format("%.4f", pValue), isSignificant);
     }
     
     /**
