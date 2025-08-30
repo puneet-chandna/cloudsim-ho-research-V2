@@ -13,6 +13,8 @@ echo "CloudSim HO Research Experiment Runner"
 echo "=========================================="
 echo "Heap Configuration: 50GB (initial and max)"
 echo "System Memory: 64GB"
+echo "Heap Configuration: 50GB (initial and max)"
+echo "System Memory: 64GB"
 echo "Date: $(date)"
 echo "=========================================="
 
