@@ -31,8 +31,28 @@ mvn clean install
 
 To run the default experiment, which includes the Micro, Small, and Medium scenarios, run the following command:
 
+**PowerShell:**
+```powershell
+./run-experiment.ps1
+```
+
+**Bash:**
 ```bash
 ./run-experiment.sh
+```
+
+### Running the Simulation from JAR
+
+To run the simulation from the JAR file, use the `run-simulation` scripts. Make sure the JAR file name in the script matches the one in your `target` directory.
+
+**PowerShell:**
+```powershell
+./run-simulation.ps1
+```
+
+**Bash:**
+```bash
+./run-simulation.sh
 ```
 
 ## Documentation
@@ -41,7 +61,11 @@ For more detailed information, please see the full [documentation](https://cloud
 
 ## Contributing
 
-We welcome contributions! Please see our [contributing guidelines](./CONTRIBUTING.md) for more information.
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+
+## Code of Conduct
+
+This project has a [Code of Conduct](CODE_OF_CONDUCT.md) that all contributors are expected to adhere to.
 
 ## License
 
@@ -49,4 +73,4 @@ This project is licensed under the [MIT License](./LICENSE).
 
 ## Acknowledgments
 
-This project is built on top of [CloudSim Plus](http://cloudsimplus.org/), a modern and full-featured framework for modeling and simulating cloud computing environments.
+This project is built on top of [CloudSim Plus](http.cloudsimplus.org/), a modern and full-featured framework for modeling and simulating cloud computing environments.
