@@ -251,6 +251,11 @@ public class PerformanceMonitor {
             PerformanceSnapshot snapshot = captureCurrentSnapshot();
             snapshots.add(snapshot);
             
+            // CRITICAL FIX: Limit snapshots size to prevent memory leaks
+            if (snapshots.size() > 1000) {
+                snapshots.subList(0, snapshots.size() - 1000).clear();
+            }
+            
             // Update peak values
             updatePeakValues(snapshot);
             

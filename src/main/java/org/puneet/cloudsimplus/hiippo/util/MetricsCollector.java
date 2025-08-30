@@ -355,8 +355,19 @@ public class MetricsCollector {
     public void recordFitnessValue(double fitness) {
         fitnessHistory.add(fitness);
         
+        // CRITICAL FIX: Limit fitness history size to prevent memory leaks
+        if (fitnessHistory.size() > 100) {
+            fitnessHistory.subList(0, fitnessHistory.size() - 100).clear();
+        }
+        
         // Store as time series metric
-        timeSeriesMetrics.computeIfAbsent("fitness", k -> new ArrayList<>()).add(fitness);
+        List<Double> fitnessTimeSeries = timeSeriesMetrics.computeIfAbsent("fitness", k -> new ArrayList<>());
+        fitnessTimeSeries.add(fitness);
+        
+        // CRITICAL FIX: Limit time series size to prevent memory leaks
+        if (fitnessTimeSeries.size() > 100) {
+            fitnessTimeSeries.subList(0, fitnessTimeSeries.size() - 100).clear();
+        }
     }
     
     /**
