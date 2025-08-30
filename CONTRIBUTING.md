@@ -38,7 +38,7 @@ This project uses Maven to manage dependencies and build the project.
 
 1.  **Prerequisites:**
     *   Java 21 or later
-    *   Maven 3.6.0 or later
+    *   Maven 3.9 or later
 
 2.  **Build the project:**
     ```bash
