@@ -424,9 +424,9 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
                                 (bwWeight * normalizedBwWastage) + 
                                 (storageWeight * normalizedStorageWastage);
             
-            logger.trace("Host {} wastage for VM {}: CPU={:.4f}, RAM={:.4f}, BW={:.4f}, Storage={:.4f}, Total={:.4f}",
-                host.getId(), vm.getId(), normalizedCpuWastage, normalizedRamWastage, 
-                normalizedBwWastage, normalizedStorageWastage, totalWastage);
+            logger.trace("Host {} wastage for VM {}: CPU={}, RAM={}, BW={}, Storage={}, Total={}",
+                host.getId(), vm.getId(), String.format("%.4f", normalizedCpuWastage), String.format("%.4f", normalizedRamWastage), 
+                String.format("%.4f", normalizedBwWastage), String.format("%.4f", normalizedStorageWastage), String.format("%.4f", totalWastage));
             
             return new ResourceWastage(totalWastage, normalizedCpuWastage, 
                 normalizedRamWastage, normalizedBwWastage, normalizedStorageWastage);
@@ -466,8 +466,8 @@ public class BestFitAllocation extends BaselineVmAllocationPolicy {
             double ramUtilization = (host.getRam().getAllocatedResource() / (double) host.getRam().getCapacity()) * 100;
             double bwUtilization = (host.getBw().getAllocatedResource() / (double) host.getBw().getCapacity()) * 100;
             double storageUtilization = (host.getStorage().getAllocatedResource() / (double) host.getStorage().getCapacity()) * 100;
-            logger.debug("Host {} utilization after VM {} allocation: RAM={:.2f}%, BW={:.2f}%, Storage={:.2f}%",
-                host.getId(), vm.getId(), ramUtilization, bwUtilization, storageUtilization);
+            logger.debug("Host {} utilization after VM {} allocation: RAM={}%, BW={}%, Storage={}%",
+                host.getId(), vm.getId(), String.format("%.2f", ramUtilization), String.format("%.2f", bwUtilization), String.format("%.2f", storageUtilization));
         } catch (Exception e) {
             logger.error("Error logging resource utilization", e);
         }

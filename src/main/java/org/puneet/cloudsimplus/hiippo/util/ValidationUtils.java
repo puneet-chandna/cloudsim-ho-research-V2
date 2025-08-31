@@ -353,11 +353,12 @@ public class ValidationUtils {
             feasible = false;
         }
         
-        logger.info("Allocation feasibility: {} (MIPS: {:.2f}%, RAM: {:.2f}%, PEs: {:.2f}%)", 
-                   feasible, 
-                   (totalRequiredMips / totalAvailableMips) * 100,
-                   (totalRequiredRam / (double) totalAvailableRam) * 100,
-                   (totalRequiredPes / (double) totalAvailablePes) * 100);
+        double mipsRatio = totalRequiredMips / totalAvailableMips;
+        double ramRatio = totalRequiredRam / (double) totalAvailableRam;
+        double peRatio = totalRequiredPes / (double) totalAvailablePes;
+        
+        logger.info("Allocation feasibility: {} (MIPS: {}%, RAM: {}%, PEs: {}%)",
+            feasible, String.format("%.2f", mipsRatio * 100), String.format("%.2f", ramRatio * 100), String.format("%.2f", peRatio * 100));
         
         return feasible;
     }

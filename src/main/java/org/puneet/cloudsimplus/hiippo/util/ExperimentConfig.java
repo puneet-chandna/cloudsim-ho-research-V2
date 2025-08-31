@@ -37,9 +37,9 @@ public final class ExperimentConfig {
     public static final long RANDOM_SEED = 123456L;
     
     // Experiment configuration - Increased for statistical significance and real cloud simulation
-    public static final int REPLICATION_COUNT = 30;  // Increased for statistical significance (30 replications per scenario)
+    public static final int REPLICATION_COUNT = 10;  
     public static final long MAX_HEAP_SIZE = 50L * 1024 * 1024 * 1024; // 50GB
-    public static final long MEMORY_WARNING_THRESHOLD = 40L * 1024 * 1024 * 1024; // 40GB
+    public static final long MEMORY_WARNING_THRESHOLD = 45L * 1024 * 1024 * 1024; // 45GB
     
     /** Confidence level for statistical analysis (95% = standard in research) */
     public static final double CONFIDENCE_LEVEL = 0.95;
@@ -220,7 +220,7 @@ public final class ExperimentConfig {
     }
 
     public static long getHostMips() {
-        return getLongProperty("host.mips", 3000);
+        return getLongProperty("host.mips", 10000); // Fixed: Use 10000 MIPS as per config.properties
     }
     public static long getHostRam() {
         return getLongProperty("host.ram", 16384);

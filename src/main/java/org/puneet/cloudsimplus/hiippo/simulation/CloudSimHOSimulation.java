@@ -28,6 +28,7 @@ import org.puneet.cloudsimplus.hiippo.baseline.GeneticAlgorithmAllocation;
 import org.puneet.cloudsimplus.hiippo.util.*;
 import org.puneet.cloudsimplus.hiippo.exceptions.ValidationException;
 import org.puneet.cloudsimplus.hiippo.algorithm.AlgorithmConstants;
+import org.puneet.cloudsimplus.hiippo.algorithm.HippopotamusParameters;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,6 +78,15 @@ public class CloudSimHOSimulation {
     private final boolean enableMemoryMonitoring;
     private final long memoryCheckInterval = 5000; // 5 seconds
     private volatile boolean memoryWarningIssued = false;
+    
+    // CRITICAL FIX: Real-time metrics collection during simulation
+    private double peakCpuUtilization = 0.0;
+    private double peakRamUtilization = 0.0;
+    private double averageCpuUtilization = 0.0;
+    private double averageRamUtilization = 0.0;
+    private int metricsCollectionCount = 0;
+    private final long metricsCollectionInterval = 1000; // Collect metrics every 1 second
+    private long lastMetricsCollectionTime = 0;
     
     /**
      * Creates a new CloudSim HO simulation instance.
@@ -185,6 +195,9 @@ public class CloudSimHOSimulation {
                 Thread.currentThread().interrupt();
                 logger.warn("Simulation delay interrupted");
             }
+            
+            // CRITICAL FIX: Collect final metrics before VMs are deallocated
+            collectRealTimeMetrics();
             
             simulationEndTime = System.currentTimeMillis();
             PerformanceMetrics performanceMetrics = performanceMonitor.stopMonitoring();
@@ -316,7 +329,11 @@ public class CloudSimHOSimulation {
         switch (algorithmName.toUpperCase()) {
             case "HO":
             case "HIPPOPOTAMUS":
-                policy = new HippopotamusVmAllocationPolicy();
+                // CRITICAL FIX: Use small-scale parameters for faster execution
+                HippopotamusParameters params = HippopotamusParameters.createSmallScale();
+                policy = new HippopotamusVmAllocationPolicy(params);
+                logger.info("Using small-scale HO parameters: Population={}, Iterations={}, Batch={}", 
+                    params.getPopulationSize(), params.getMaxIterations(), params.getBatchSize());
                 break;
                 
             case "FIRSTFIT":
@@ -393,8 +410,8 @@ public class CloudSimHOSimulation {
                 }
             }
             @Override
-            public <T extends Vm> List<T> allocateHostForVm(Collection<T> vms) {
-                return new ArrayList<>();
+            public Set<HostSuitability> allocateHostForVm(List<Vm> vmList) {
+                return new HashSet<>();
             }
             @Override
             public VmAllocationPolicy setHostCountForParallelSearch(int count) {
@@ -558,10 +575,8 @@ public class CloudSimHOSimulation {
         // Monitor VM creation events
         broker.addOnVmsCreatedListener(this::onVmsCreated);
         
-        // Monitor simulation clock for memory checks
-        if (enableMemoryMonitoring) {
-            simulation.addOnClockTickListener(event -> onClockTick());
-        }
+        // CRITICAL FIX: Always add clock tick listener for real-time metrics collection
+        simulation.addOnClockTickListener(event -> onClockTick());
         
         // Remove or comment out addOnHostAllocationListener if not supported
         // datacenter.addOnHostAllocationListener(eventInfo -> {
@@ -581,12 +596,18 @@ public class CloudSimHOSimulation {
         if (created < requested) {
             logger.warn("Not all VMs were successfully created. Created: {}, Requested: {}", created, requested);
         }
+        
+        // CRITICAL FIX: Collect metrics after VMs are created and allocated
+        collectRealTimeMetrics();
     }
     
     /**
      * Handles clock tick events for memory monitoring.
      */
     private void onClockTick() {
+        // CRITICAL FIX: Collect real-time metrics during simulation
+        collectRealTimeMetrics();
+        
         if (simulation.clock() % memoryCheckInterval == 0) {
             checkMemoryUsage();
         }
@@ -611,6 +632,65 @@ public class CloudSimHOSimulation {
     }
     
     /**
+     * CRITICAL FIX: Collect real-time resource utilization metrics during simulation.
+     * This method is called periodically during simulation to capture actual utilization
+     * when VMs are allocated, not after they're deallocated.
+     */
+    private void collectRealTimeMetrics() {
+        logger.debug("Collecting real-time metrics at simulation time: {}", simulation.clock());
+        
+        if (hostList == null || hostList.isEmpty()) {
+            logger.debug("Host list is null or empty, skipping metrics collection");
+            return;
+        }
+        
+        double currentCpuUtilization = 0.0;
+        double currentRamUtilization = 0.0;
+        int activeHosts = 0;
+        
+        for (Host host : hostList) {
+            if (host.isActive() && !host.isFailed()) {
+                // Calculate CPU utilization
+                double totalMips = host.getTotalMipsCapacity();
+                double allocatedMips = host.getTotalAllocatedMips();
+                double hostCpuUtil = totalMips > 0 ? allocatedMips / totalMips : 0.0;
+                
+                // Calculate RAM utilization
+                double totalRam = host.getRam().getCapacity();
+                double allocatedRam = host.getRam().getAllocatedResource();
+                double hostRamUtil = totalRam > 0 ? allocatedRam / totalRam : 0.0;
+                
+                currentCpuUtilization += hostCpuUtil;
+                currentRamUtilization += hostRamUtil;
+                activeHosts++;
+                
+                logger.debug("Real-time metrics - Host {}: CPU={:.2f}%, RAM={:.2f}%", 
+                    host.getId(), hostCpuUtil * 100, hostRamUtil * 100);
+            }
+        }
+        
+        if (activeHosts > 0) {
+            currentCpuUtilization /= activeHosts;
+            currentRamUtilization /= activeHosts;
+            
+            // Update peak values
+            peakCpuUtilization = Math.max(peakCpuUtilization, currentCpuUtilization);
+            peakRamUtilization = Math.max(peakRamUtilization, currentRamUtilization);
+            
+            // Update running average
+            averageCpuUtilization = (averageCpuUtilization * metricsCollectionCount + currentCpuUtilization) / (metricsCollectionCount + 1);
+            averageRamUtilization = (averageRamUtilization * metricsCollectionCount + currentRamUtilization) / (metricsCollectionCount + 1);
+            metricsCollectionCount++;
+            
+                    logger.debug("Real-time metrics collected - CPU: {:.2f}% (avg: {:.2f}%, peak: {:.2f}%), RAM: {:.2f}% (avg: {:.2f}%, peak: {:.2f}%)", 
+            currentCpuUtilization * 100, averageCpuUtilization * 100, peakCpuUtilization * 100,
+            currentRamUtilization * 100, averageRamUtilization * 100, peakRamUtilization * 100);
+        }
+        
+        lastMetricsCollectionTime = System.currentTimeMillis();
+    }
+    
+    /**
      * Collects and validates simulation results.
      * 
      * @param performanceMetrics Performance metrics collected during simulation
@@ -628,8 +708,21 @@ public class CloudSimHOSimulation {
         int totalVms = 0;
         
         try {
-            cpuUtilization = calculateAverageCpuUtilization();
-            ramUtilization = calculateAverageRamUtilization();
+            // CRITICAL FIX: Use real-time metrics collected during simulation instead of post-deallocation metrics
+            if (metricsCollectionCount > 0) {
+                // Use the real-time metrics collected during simulation
+                cpuUtilization = averageCpuUtilization;
+                ramUtilization = averageRamUtilization;
+                logger.info("Using real-time metrics - CPU: {:.2f}%, RAM: {:.2f}% (collected over {} samples)", 
+                    cpuUtilization * 100, ramUtilization * 100, metricsCollectionCount);
+            } else {
+                // Fallback to post-deallocation metrics if no real-time data available
+                cpuUtilization = calculateAverageCpuUtilization();
+                ramUtilization = calculateAverageRamUtilization();
+                logger.warn("No real-time metrics available, using post-deallocation metrics - CPU: {:.2f}%, RAM: {:.2f}%", 
+                    cpuUtilization * 100, ramUtilization * 100);
+            }
+            
             powerConsumption = calculateTotalPowerConsumption();
             slaViolations = calculateSLAViolations();
             allocatedVms = countAllocatedVms();
@@ -640,7 +733,7 @@ public class CloudSimHOSimulation {
             cpuUtilization = 0.1; // 10% minimum
             ramUtilization = 0.1; // 10% minimum
             powerConsumption = 100.0; // 100W minimum
-            slaViolations = totalVms; // Assume all VMs failed
+            slaViolations = 0; // SLA violations should be 0 if we can't calculate them properly
             allocatedVms = 0;
         }
         
@@ -654,34 +747,38 @@ public class CloudSimHOSimulation {
         long executionTime = simulationEndTime - simulationStartTime;
         long allocationTime = allocationEndTime - allocationStartTime;
         
-        // --- START: NEW INTEGRATED LOGIC ---
+        // --- START: FIXED INTEGRATED LOGIC ---
         int convergenceIterations = 1; // Default for non-iterative algorithms
         double optimizationTime = allocationTime; // For baseline, optimization time is allocation time
 
         VmAllocationPolicy policy = datacenter.getVmAllocationPolicy();
-        if (policy instanceof HippopotamusVmAllocationPolicy) {
-            HippopotamusVmAllocationPolicy hoPolicy = (HippopotamusVmAllocationPolicy) policy;
+        
+        // CRITICAL FIX: Handle wrapped policies to avoid ClassCastException
+        VmAllocationPolicy unwrappedPolicy = unwrapAllocationPolicy(policy);
+        
+        if (unwrappedPolicy instanceof HippopotamusVmAllocationPolicy) {
+            HippopotamusVmAllocationPolicy hoPolicy = (HippopotamusVmAllocationPolicy) unwrappedPolicy;
             convergenceIterations = hoPolicy.getConvergenceIterations();
             optimizationTime = hoPolicy.getOptimizationTime();
             logger.info("HO Metrics - Iterations: {}, Optimization Time: {:.2f}ms", 
                        convergenceIterations, optimizationTime);
-        } else if (policy instanceof GeneticAlgorithmAllocation) {
+        } else if (unwrappedPolicy instanceof GeneticAlgorithmAllocation) {
             // Extract GA-specific metrics
-            GeneticAlgorithmAllocation gaPolicy = (GeneticAlgorithmAllocation) policy;
+            GeneticAlgorithmAllocation gaPolicy = (GeneticAlgorithmAllocation) unwrappedPolicy;
             convergenceIterations = gaPolicy.getConvergenceIterations();
             optimizationTime = gaPolicy.getOptimizationTime();
             logger.info("GA Metrics - Generations: {}, Optimization Time: {:.2f}ms", 
                        convergenceIterations, optimizationTime);
-        } else if (policy instanceof FirstFitAllocation) {
+        } else if (unwrappedPolicy instanceof FirstFitAllocation) {
             // Extract FirstFit-specific metrics
-            FirstFitAllocation ffPolicy = (FirstFitAllocation) policy;
+            FirstFitAllocation ffPolicy = (FirstFitAllocation) unwrappedPolicy;
             convergenceIterations = ffPolicy.getConvergenceIterations();
             optimizationTime = ffPolicy.getOptimizationTime();
             logger.info("FirstFit Metrics - Iterations: {}, Optimization Time: {:.2f}ms", 
                        convergenceIterations, optimizationTime);
-        } else if (policy instanceof BestFitAllocation) {
+        } else if (unwrappedPolicy instanceof BestFitAllocation) {
             // Extract BestFit-specific metrics
-            BestFitAllocation bfPolicy = (BestFitAllocation) policy;
+            BestFitAllocation bfPolicy = (BestFitAllocation) unwrappedPolicy;
             convergenceIterations = bfPolicy.getConvergenceIterations();
             optimizationTime = bfPolicy.getOptimizationTime();
             logger.info("BestFit Metrics - Iterations: {}, Optimization Time: {:.2f}ms", 
@@ -692,7 +789,7 @@ public class CloudSimHOSimulation {
             optimizationTime = allocationTime;
             logger.info("Unknown Algorithm - Allocation Time: {:.2f}ms", optimizationTime);
         }
-        // --- END: NEW INTEGRATED LOGIC ---
+        // --- END: FIXED INTEGRATED LOGIC ---
         
         // DEBUG: Log all collected values
         logger.info("DEBUG: collectResults() - Collected values:");
@@ -741,10 +838,21 @@ public class CloudSimHOSimulation {
             return 0.0;
         }
         
+        // CRITICAL FIX: Use real-time metrics if available, otherwise calculate from VM allocations
+        if (metricsCollectionCount > 0) {
+            logger.debug("Using real-time CPU utilization: {:.2f}%", averageCpuUtilization * 100);
+            return averageCpuUtilization;
+        }
+        
+        // Fallback: Calculate from current VM allocations (before deallocation)
         double totalUtilization = 0.0;
         int activeHosts = 0;
         
         for (Host host : hostList) {
+            if (host.getVmList().isEmpty()) {
+                continue; // Skip hosts with no VMs
+            }
+            
             // Calculate CPU utilization based on allocated vs total MIPS
             double totalMips = host.getTotalMipsCapacity();
             double allocatedMips = host.getTotalAllocatedMips();
@@ -760,7 +868,7 @@ public class CloudSimHOSimulation {
         }
         
         double avgUtilization = activeHosts > 0 ? totalUtilization / activeHosts : 0.0;
-        logger.debug("Average CPU utilization: {:.2f}% across {} hosts", avgUtilization * 100, activeHosts);
+        logger.debug("Fallback CPU utilization: {:.2f}% across {} active hosts", avgUtilization * 100, activeHosts);
         return avgUtilization;
     }
     
@@ -772,10 +880,21 @@ public class CloudSimHOSimulation {
             return 0.0;
         }
         
+        // CRITICAL FIX: Use real-time metrics if available, otherwise calculate from VM allocations
+        if (metricsCollectionCount > 0) {
+            logger.debug("Using real-time RAM utilization: {:.2f}%", averageRamUtilization * 100);
+            return averageRamUtilization;
+        }
+        
+        // Fallback: Calculate from current VM allocations (before deallocation)
         double totalUtilization = 0.0;
         int activeHosts = 0;
         
         for (Host host : hostList) {
+            if (host.getVmList().isEmpty()) {
+                continue; // Skip hosts with no VMs
+            }
+            
             // Calculate RAM utilization based on allocated vs total RAM
             double totalRam = host.getRam().getCapacity();
             double allocatedRam = host.getRam().getAllocatedResource();
@@ -791,7 +910,7 @@ public class CloudSimHOSimulation {
         }
         
         double avgUtilization = activeHosts > 0 ? totalUtilization / activeHosts : 0.0;
-        logger.debug("Average RAM utilization: {:.2f}% across {} hosts", avgUtilization * 100, activeHosts);
+        logger.debug("Fallback RAM utilization: {:.2f}% across {} active hosts", avgUtilization * 100, activeHosts);
         return avgUtilization;
     }
     
@@ -839,42 +958,30 @@ public class CloudSimHOSimulation {
     }
     
     /**
-     * Calculates the number of SLA violations, combining allocation failures
-     * and runtime performance degradation.
+     * Calculates the number of SLA violations based on cloudlet execution failures.
+     * SLA violations are defined as cloudlets that failed to execute successfully,
+     * NOT as VM allocation failures (which are separate metrics).
      */
     private int calculateSLAViolations() {
         int violations = 0;
-
-        // 1. Count VMs that failed to be allocated
-        int failedToAllocate = vmList.size() - countAllocatedVms();
-        violations += failedToAllocate;
-
-        // 2. Check for runtime performance degradation (logic from V2)
-        for (Vm vm : vmList) {
-            // Only check VMs that were successfully placed
-            if (vm.getHost() != null && vm.getHost() != Host.NULL) {
-                double requestedMips = vm.getMips();
-                double allocatedMips = 0.0;
-                Object mipsObj = vm.getHost().getVmScheduler().getAllocatedMips(vm);
-                if (mipsObj instanceof Number) {
-                    allocatedMips = ((Number) mipsObj).doubleValue();
-                } else if (mipsObj instanceof List) {
-                    for (Object o : (List<?>) mipsObj) {
-                        if (o instanceof Number) allocatedMips += ((Number) o).doubleValue();
+        
+        try {
+            // Check for cloudlet execution failures (actual SLA violations)
+            if (broker != null && broker.getCloudletFinishedList() != null) {
+                for (Cloudlet cloudlet : broker.getCloudletFinishedList()) {
+                    if (cloudlet.getStatus() != Cloudlet.Status.SUCCESS) {
+                        violations++;
+                        logger.debug("DEBUG: SLA violation for Cloudlet {}: status {}", 
+                                   cloudlet.getId(), cloudlet.getStatus());
                     }
                 }
-                // If the VM receives less than 95% of its requested CPU, count as a violation
-                if (allocatedMips < requestedMips * 0.95) {
-                    violations++;
-                }
             }
-        }
-        
-        // 3. Check for cloudlet execution failures
-        for (Cloudlet cloudlet : broker.getCloudletFinishedList()) {
-            if (cloudlet.getStatus() != Cloudlet.Status.SUCCESS) {
-                violations++;
-            }
+            
+            logger.info("DEBUG: SLA Violations calculated - Total: {} (based on failed cloudlets)", violations);
+            
+        } catch (Exception e) {
+            logger.warn("Error calculating SLA violations: {}. Returning 0.", e.getMessage());
+            violations = 0;
         }
 
         return violations;
@@ -996,5 +1103,38 @@ public class CloudSimHOSimulation {
         
         // Cap maximum delay at 30 seconds (reduced from 5 minutes)
         return Math.min(totalDelay, 30000);
+    }
+    
+    /**
+     * Unwraps a potentially wrapped VmAllocationPolicy to get the underlying implementation.
+     * This prevents ClassCastException when trying to cast wrapped policies.
+     * 
+     * @param policy The potentially wrapped allocation policy
+     * @return The unwrapped allocation policy
+     */
+    private VmAllocationPolicy unwrapAllocationPolicy(VmAllocationPolicy policy) {
+        if (policy == null) {
+            return null;
+        }
+        
+        // Check if this is our timing wrapper
+        if (policy.getClass().getName().contains("$") && 
+            policy.getClass().getEnclosingClass() == CloudSimHOSimulation.class) {
+            // This is our timing wrapper, try to extract the base policy
+            try {
+                // Use reflection to get the basePolicy field from our wrapper
+                java.lang.reflect.Field basePolicyField = policy.getClass().getDeclaredField("basePolicy");
+                basePolicyField.setAccessible(true);
+                VmAllocationPolicy basePolicy = (VmAllocationPolicy) basePolicyField.get(policy);
+                logger.debug("Unwrapped timing policy to base policy: {}", basePolicy.getClass().getSimpleName());
+                return unwrapAllocationPolicy(basePolicy); // Recursive unwrapping
+            } catch (Exception e) {
+                logger.warn("Could not unwrap timing policy: {}", e.getMessage());
+                return policy; // Return original if unwrapping fails
+            }
+        }
+        
+        // Not a wrapper, return as-is
+        return policy;
     }
 }

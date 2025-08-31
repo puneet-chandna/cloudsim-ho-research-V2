@@ -134,9 +134,8 @@ public class MetricsCollector {
                         totalCpuCapacity += hostCpuCapacity;
                         totalCpuUsed += hostCpuUsed;
                         
-                        logger.debug("Host {}: CPU {:.2f}/{:.2f} MIPS ({:.2f}%)", 
-                                   host.getId(), hostCpuUsed, hostCpuCapacity, 
-                                   (hostCpuUsed / hostCpuCapacity) * 100);
+                        logger.debug("Host {}: CPU {}/{} MIPS ({})", 
+                                   host.getId(), String.format("%.2f", hostCpuUsed), String.format("%.2f", hostCpuCapacity), String.format("%.2f", (hostCpuUsed / hostCpuCapacity) * 100));
                     }
                     
                     // RAM utilization
@@ -165,8 +164,8 @@ public class MetricsCollector {
             metrics.put("ResourceUtilCPU", cpuUtilization);
             metrics.put("ResourceUtilRAM", ramUtilization);
             
-            logger.debug("Resource utilization - CPU: {:.2f}%, RAM: {:.2f}%", 
-                        cpuUtilization * 100, ramUtilization * 100);
+            logger.debug("Resource utilization - CPU: {}%, RAM: {}%", 
+                        String.format("%.2f", cpuUtilization * 100), String.format("%.2f", ramUtilization * 100));
             
         } catch (Exception e) {
             logger.error("Error collecting resource utilization metrics", e);
@@ -197,19 +196,37 @@ public class MetricsCollector {
                     double hostTotalMips = host.getTotalMipsCapacity();
                     double utilization = hostTotalMips > 0 ? host.getCpuMipsUtilization() / hostTotalMips : 0.0;
                     
+                    // Ensure utilization is between 0 and 1
+                    utilization = Math.max(0.0, Math.min(1.0, utilization));
+                    
                     // Check if host has power model
                     if (host.getPowerModel() != null) {
                         double hostPower = host.getPowerModel().getPower(utilization);
                         totalPower += hostPower;
                         
-                        logger.trace("Host {} power consumption: {} W at {:.2f}% utilization", 
+                        logger.debug("Host {} power consumption: {:.2f} W at {:.2f}% utilization", 
                                    host.getId(), hostPower, utilization * 100);
                     } else {
                         // Estimate power if no model available (linear approximation)
+                        // Use host-specific power values based on configuration
                         double idlePower = 100; // Watts
                         double maxPower = 250;  // Watts
+                        
+                        // Adjust power based on host capacity (more PEs = more power)
+                        int peCount = (int) host.getPesNumber();
+                        if (peCount > 8) {
+                            idlePower = 150;
+                            maxPower = 400;
+                        } else if (peCount > 4) {
+                            idlePower = 125;
+                            maxPower = 300;
+                        }
+                        
                         double hostPower = idlePower + (maxPower - idlePower) * utilization;
                         totalPower += hostPower;
+                        
+                        logger.debug("Host {} estimated power: {:.2f} W at {:.2f}% utilization ({} PEs)", 
+                                   host.getId(), hostPower, utilization * 100, peCount);
                     }
                 }
             }
@@ -280,7 +297,7 @@ public class MetricsCollector {
                 if (cloudlet == null) continue;
                 
                 // Check response time SLA
-                double actualTime = cloudlet.getFinishTime() - cloudlet.getExecStartTime();
+                double actualTime = cloudlet.getFinishTime() - cloudlet.getStartTime();
                 double expectedTime = cloudlet.getLength() / cloudlet.getVm().getMips();
                 
                 if (actualTime > expectedTime * SLA_RESPONSE_TIME_THRESHOLD) {
@@ -309,8 +326,8 @@ public class MetricsCollector {
     private void checkHostSLAViolation(Host host, double cpuUtilization) {
         if (cpuUtilization > SLA_CPU_THRESHOLD) {
             slaViolations++;
-            logger.debug("SLA violation on Host {}: CPU utilization {:.2f}% exceeds threshold", 
-                       host.getId(), cpuUtilization * 100);
+            logger.debug("SLA violation on Host {}: CPU utilization {}% exceeds threshold", 
+                       host.getId(), String.format("%.2f", cpuUtilization * 100));
         }
     }
     
@@ -338,8 +355,19 @@ public class MetricsCollector {
     public void recordFitnessValue(double fitness) {
         fitnessHistory.add(fitness);
         
+        // CRITICAL FIX: Limit fitness history size to prevent memory leaks
+        if (fitnessHistory.size() > 100) {
+            fitnessHistory.subList(0, fitnessHistory.size() - 100).clear();
+        }
+        
         // Store as time series metric
-        timeSeriesMetrics.computeIfAbsent("fitness", k -> new ArrayList<>()).add(fitness);
+        List<Double> fitnessTimeSeries = timeSeriesMetrics.computeIfAbsent("fitness", k -> new ArrayList<>());
+        fitnessTimeSeries.add(fitness);
+        
+        // CRITICAL FIX: Limit time series size to prevent memory leaks
+        if (fitnessTimeSeries.size() > 100) {
+            fitnessTimeSeries.subList(0, fitnessTimeSeries.size() - 100).clear();
+        }
     }
     
     /**
@@ -399,9 +427,9 @@ public class MetricsCollector {
             double slaCompliance = 1.0 - (slaViolations / Math.max(vmTotal, 1.0));
             metrics.put("SLACompliance", Math.max(0.0, slaCompliance));
             
-            logger.debug("Derived metrics calculated - Success Rate: {:.2f}%, " +
-                        "Power Efficiency: {:.4f}, SLA Compliance: {:.2f}%",
-                        allocationSuccessRate * 100, powerEfficiency, slaCompliance * 100);
+            logger.debug("Derived metrics calculated - Success Rate: {}%, " +
+                        "Power Efficiency: {}, SLA Compliance: {}%",
+                        String.format("%.2f", allocationSuccessRate * 100), String.format("%.4f", powerEfficiency), String.format("%.2f", slaCompliance * 100));
             
         } catch (Exception e) {
             logger.error("Error calculating derived metrics", e);

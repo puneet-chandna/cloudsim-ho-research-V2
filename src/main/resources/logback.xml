@@ -6,7 +6,7 @@
             <pattern>%msg%n</pattern>
         </encoder>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>INFO</level>
+            <level>WARN</level>
         </filter>
     </appender>
     
@@ -24,30 +24,49 @@
         </filter>
     </appender>
     
-    <!-- File Appender for Detailed Logs -->
+    <!-- File Appender for Detailed Logs - STRICT SIZE LIMITS -->
     <appender name="DETAILED_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/cloudsim-ho-detailed.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/cloudsim-ho-detailed-%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>30</maxHistory>
-            <totalSizeCap>1GB</totalSizeCap>
+        <file>${run.logs.dir:-logs}/cloudsim-ho-detailed.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${run.logs.dir:-logs}/cloudsim-ho-detailed-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>5</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
     </appender>
     
-    <!-- Run-specific Log File Appender -->
-    <appender name="RUN_LOG" class="ch.qos.logback.core.FileAppender">
-        <file>logs/run-${run.id:-default}.log</file>
+    <!-- Run-specific Log File Appender - SIZE LIMITED -->
+    <appender name="RUN_LOG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${run.logs.dir:-logs}/run-${run.id:-default}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${run.logs.dir:-logs}/run-${run.id:-default}-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+        </rollingPolicy>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
     </appender>
     
-    <!-- Error File Appender -->
-    <appender name="ERROR_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/errors.log</file>
+    <!-- Error File Appender - SIZE LIMITED -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${run.logs.dir:-logs}/errors.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${run.logs.dir:-logs}/errors-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>150MB</totalSizeCap>
+        </rollingPolicy>
         <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
             <level>ERROR</level>
         </filter>
@@ -56,38 +75,52 @@
         </encoder>
     </appender>
     
-    <!-- Memory Monitor Appender -->
+    <!-- Memory Monitor Appender - SIZE LIMITED -->
     <appender name="MEMORY" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/memory-usage.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/memory-usage-%d{yyyy-MM-dd}.log</fileNamePattern>
-            <maxHistory>7</maxHistory>
+        <file>${run.logs.dir:-logs}/memory-usage.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${run.logs.dir:-logs}/memory-usage-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>150MB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
     </appender>
     
-    <!-- Performance Metrics Appender -->
-    <appender name="PERFORMANCE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/performance-metrics.log</file>
+    <!-- Performance Metrics Appender - SIZE LIMITED -->
+    <appender name="PERFORMANCE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${run.logs.dir:-logs}/performance-metrics.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${run.logs.dir:-logs}/performance-metrics-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>150MB</totalSizeCap>
+        </rollingPolicy>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
         </encoder>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
     </appender>
     
     <!-- Logger Configuration -->
     
-    <!-- CloudSim Plus Logging - Redirect to file only -->
-    <logger name="org.cloudsimplus" level="WARN" additivity="false">
+    <!-- CloudSim Plus Logging - MINIMAL LOGGING -->
+    <logger name="org.cloudsimplus" level="ERROR" additivity="false">
         <appender-ref ref="DETAILED_FILE"/>
     </logger>
-    <logger name="org.cloudbus.cloudsim" level="WARN" additivity="false">
+    <logger name="org.cloudbus.cloudsim" level="ERROR" additivity="false">
         <appender-ref ref="DETAILED_FILE"/>
     </logger>
     
-    <!-- Application Loggers - Redirect to file only -->
-    <logger name="org.puneet.cloudsimplus.hiippo" level="INFO" additivity="false">
+    <!-- Application Loggers - REDUCED LOGGING -->
+    <logger name="org.puneet.cloudsimplus.hiippo" level="WARN" additivity="false">
         <appender-ref ref="DETAILED_FILE"/>
         <appender-ref ref="RUN_LOG"/>
     </logger>
@@ -99,21 +132,21 @@
         <appender-ref ref="RUN_LOG"/>
     </logger>
     
-    <!-- Specialized Loggers -->
-    <logger name="org.puneet.cloudsimplus.hiippo.util.MemoryManager" level="INFO" additivity="false">
+    <!-- Specialized Loggers - REDUCED LOGGING -->
+    <logger name="org.puneet.cloudsimplus.hiippo.util.MemoryManager" level="WARN" additivity="false">
         <appender-ref ref="MEMORY"/>
         <appender-ref ref="DETAILED_FILE"/>
         <appender-ref ref="RUN_LOG"/>
     </logger>
     
-    <logger name="org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor" level="INFO" additivity="false">
+    <logger name="org.puneet.cloudsimplus.hiippo.util.PerformanceMonitor" level="WARN" additivity="false">
         <appender-ref ref="PERFORMANCE"/>
         <appender-ref ref="DETAILED_FILE"/>
         <appender-ref ref="RUN_LOG"/>
     </logger>
     
-    <!-- Root Logger - Redirect to file only -->
-    <root level="INFO">
+    <!-- Root Logger - MINIMAL LOGGING -->
+    <root level="WARN">
         <appender-ref ref="DETAILED_FILE"/>
         <appender-ref ref="RUN_LOG"/>
         <appender-ref ref="ERROR_FILE"/>

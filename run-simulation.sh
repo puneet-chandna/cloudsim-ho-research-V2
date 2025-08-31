@@ -1,28 +1,20 @@
 #!/bin/bash
 
 # CloudSim HO Research Experiment Runner
-# Updated for 8GB heap configuration
+# Updated for JAR execution with heap configuration
 # author: Puneet Chandna
 # date: 2025-08-01
 # version: 1.0.0
-# description: This script runs the CloudSim HO Research Experiment.
-# It is used to run the experiment with the 8GB heap configuration.
+# description: This script runs the CloudSim HO Research Experiment using JAR files.
+# It is used to run the experiment with the 50GB heap configuration.
 
 echo "=========================================="
 echo "CloudSim HO Research Experiment Runner"
 echo "=========================================="
-echo "Heap Configuration: 50GB (initial and max)"
-echo "System Memory: 64GB"
-echo "Heap Configuration: 50GB (initial and max)"
+echo "Heap Configuration: 45GB (initial and max)"
 echo "System Memory: 64GB"
 echo "Date: $(date)"
 echo "=========================================="
-
-# Check if Maven is available
-if ! command -v mvn &> /dev/null; then
-    echo "Error: Maven is not installed or not in PATH"
-    exit 1
-fi
 
 # Check available memory
 echo "Checking system memory..."
@@ -30,7 +22,7 @@ TOTAL_MEM=$(free -g | awk '/^Mem:/{print $2}')
 echo "Total system memory: ${TOTAL_MEM}GB"
 
 if [ "$TOTAL_MEM" -lt 64 ]; then
-    echo "Warning: System has less than 64GB RAM. 50GB heap may cause issues."
+    echo "Warning: System has less than 64GB RAM. 45GB heap may cause issues."
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -38,23 +30,23 @@ if [ "$TOTAL_MEM" -lt 64 ]; then
     fi
 fi
 
-# Clean and build the project
-echo "Building project..."
-mvn clean compile -q
-if [ $? -ne 0 ]; then
-    echo "Error: Build failed"
+# Check if the JAR file exists
+JAR_PATH="target/cloudsim-ho-research-v2-1.0-SNAPSHOT.jar"
+if [ ! -f "$JAR_PATH" ]; then
+    echo "Error: JAR file not found at $JAR_PATH"
     exit 1
 fi
 
-echo "Build successful!"
+# Java heap and GC flags
+JAVA_FLAGS="-Xms45G -Xmx45G -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:+PrintGCDetails -XX:+PrintGCTimeStamps -Xloggc:gc.log -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./heapdump.hprof -XX:+DisableExplicitGC"
 
-# Run the experiment
-echo "Starting experiment with 50GB heap configuration..."
+# Run the experiment with the configured JAR
+echo "Starting experiment with 45GB heap configuration..."
 echo "This may take 1-2 hours for the complete experimental suite."
 echo ""
 
-# Run with Maven exec plugin (uses pom.xml configuration)
-mvn exec:java -Dexec.mainClass="org.puneet.cloudsimplus.hiippo.App" -q
+# Execute JAR file with the configured heap and GC settings
+java $JAVA_FLAGS -jar "$JAR_PATH"
 
 # Check exit status
 if [ $? -eq 0 ]; then
@@ -71,4 +63,4 @@ else
     echo "Check logs for error details."
     echo "=========================================="
     exit 1
-fi 
+fi

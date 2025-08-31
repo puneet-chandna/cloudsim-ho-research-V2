@@ -35,6 +35,7 @@ public class RunManager {
     private final String runTimestamp;
     private final Path resultsPath;
     private final Path logsPath;
+    private final Path runLogsPath;
     
     /**
      * Private constructor to enforce singleton pattern.
@@ -44,9 +45,19 @@ public class RunManager {
         this.runTimestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         this.resultsPath = Paths.get(RESULTS_BASE_DIR, runId);
         this.logsPath = Paths.get(LOGS_DIR);
+        this.runLogsPath = resultsPath.resolve("logs");
         
         // Set MDC for logging context
         MDC.put("run.id", runId);
+        
+        // Ensure run-specific directories exist early so logging can target them
+        createRunDirectories();
+
+        // Expose run-specific logs directory to logging configuration
+        // Logback picks up this system property (${run.logs.dir}) to route file appenders
+        System.setProperty("run.logs.dir", runLogsPath.toString());
+        // Also expose run id for any config using ${run.id}
+        System.setProperty("run.id", runId);
         
         logger.info("RunManager initialized with Run ID: {}", runId);
     }
@@ -115,6 +126,15 @@ public class RunManager {
     }
     
     /**
+     * Gets the run-specific logs path.
+     * 
+     * @return Run-specific logs path
+     */
+    public Path getRunLogsPath() {
+        return runLogsPath;
+    }
+    
+    /**
      * Creates the run-specific directory structure.
      * 
      * @return true if directories were created successfully, false otherwise
@@ -129,7 +149,7 @@ public class RunManager {
                 resultsPath.resolve("scalability_analysis").toString(),
                 resultsPath.resolve("convergence_data").toString(),
                 resultsPath.resolve("comparison_data").toString(),
-                resultsPath.resolve("logs").toString(),
+                runLogsPath.toString(),
                 resultsPath.resolve("backups").toString(),
                 logsPath.toString()
             );
@@ -144,11 +164,47 @@ public class RunManager {
             createRunReadme();
             
             logger.info("Run directories created successfully: {}", resultsPath.toAbsolutePath());
+            logger.info("Run-specific logs directory: {}", runLogsPath.toAbsolutePath());
             return true;
             
         } catch (IOException e) {
             logger.error("Failed to create run directories", e);
             return false;
+        }
+    }
+    
+    /**
+     * Copies log files to the run-specific logs directory.
+     * This should be called at the end of the experiment.
+     */
+    public void copyLogsToRunDirectory() {
+        try {
+            logger.info("Copying log files to run-specific directory: {}", runLogsPath);
+            
+            // List of log files to copy
+            List<String> logFiles = List.of(
+                "run-" + runId + ".log",
+                "errors.log", 
+                "performance-metrics.log",
+                "memory-usage.log"
+            );
+            
+            for (String logFile : logFiles) {
+                Path sourcePath = logsPath.resolve(logFile);
+                Path targetPath = runLogsPath.resolve(logFile);
+                
+                if (Files.exists(sourcePath)) {
+                    Files.copy(sourcePath, targetPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    logger.debug("Copied log file: {} -> {}", sourcePath, targetPath);
+                } else {
+                    logger.debug("Log file not found: {}", sourcePath);
+                }
+            }
+            
+            logger.info("Log files copied successfully to run directory");
+            
+        } catch (IOException e) {
+            logger.error("Failed to copy log files to run directory", e);
         }
     }
     
@@ -170,8 +226,14 @@ public class RunManager {
                 "- scalability_analysis/: Scalability test results",
                 "- convergence_data/: Algorithm convergence tracking data",
                 "- comparison_data/: Algorithm comparison results",
-                "- logs/: Detailed execution logs for this run",
-                "- backups/: Backup copies of important results"
+                "- logs/: Run-specific execution logs (this folder)",
+                "- backups/: Backup copies of important results",
+                "",
+                "Log Files:",
+                "- run-" + runId + ".log: Main execution log for this run",
+                "- errors.log: Error messages and exceptions",
+                "- performance-metrics.log: Performance monitoring data",
+                "- memory-usage.log: Memory usage tracking"
             );
             Files.write(readmePath, readmeContent);
             logger.debug("Created README file for run: {}", runId);
@@ -205,7 +267,7 @@ public class RunManager {
      * @return Path to run log file
      */
     public Path getRunLogPath() {
-        return logsPath.resolve("run-" + runId + ".log");
+        return runLogsPath.resolve("run-" + runId + ".log");
     }
     
     /**

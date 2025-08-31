@@ -29,27 +29,27 @@ public final class AlgorithmConstants {
      * Default population size for the HO algorithm.
      * Optimized for superior VM placement performance and solution quality.
      */
-    public static final int DEFAULT_POPULATION_SIZE = 120;  // Increased for superior exploration
-    public static final int MIN_POPULATION_SIZE = 50;       // Increased for minimum quality
-    public static final int MAX_POPULATION_SIZE = 300;      // Increased for enterprise scenarios
+    public static final int DEFAULT_POPULATION_SIZE = 30;  // Optimized for performance
+    public static final int MIN_POPULATION_SIZE = 20;       // Optimized for minimum quality
+    public static final int MAX_POPULATION_SIZE = 100;      // Optimized for enterprise scenarios
     /**
      * Maximum number of iterations for the HO algorithm.
-     * Optimized for superior convergence and VM placement quality.
+     * Optimized for performance and VM placement quality.
      */
-    public static final int DEFAULT_MAX_ITERATIONS = 200;  // Increased for superior convergence
-    public static final int MIN_ITERATIONS = 80;           // Increased for minimum quality
-    public static final int MAX_ITERATIONS = 800;          // Increased for enterprise scenarios
+    public static final int DEFAULT_MAX_ITERATIONS = 50;  // Optimized for performance
+    public static final int MIN_ITERATIONS = 20;           // Optimized for minimum quality
+    public static final int MAX_ITERATIONS = 200;          // Optimized for enterprise scenarios
     /**
      * Convergence threshold for early termination.
      * Optimized for better VM placement precision and efficiency.
      */
-    public static final double DEFAULT_CONVERGENCE_THRESHOLD = 0.0001;  // More precise convergence
+    public static final double DEFAULT_CONVERGENCE_THRESHOLD = 0.001;  // Optimized for faster convergence
     
     /**
      * Maximum number of iterations without improvement before convergence is declared.
      * Optimized for better convergence stability in VM placement.
      */
-    public static final int CONVERGENCE_CHECK_WINDOW = 12;  // More stable convergence
+    public static final int CONVERGENCE_CHECK_WINDOW = 5;  // Optimized for faster convergence
 
      // ===================================================================================
     // ALGORITHM BEHAVIOR PARAMETERS 
