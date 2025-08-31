@@ -88,7 +88,13 @@
         </dependency>
         </dependencies>
     
-
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Puneet Apache Maven Packages</name>
+            <url>https://maven.pkg.github.com/puneet-chandna/cloudsim-ho-research-V2</url>
+        </repository>
+    </distributionManagement>
     
     <build>
         <plugins>
