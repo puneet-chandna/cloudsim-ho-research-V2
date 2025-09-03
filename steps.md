@@ -25,13 +25,35 @@
 - `src/main/java/org/puneet/cloudsimplus/hiippo/util/PerformanceMonitor.java`
 
 **Changes**:
-- Limited fitness history to 100 entries maximum
-- Limited performance snapshots to 1000 entries maximum
-- Added automatic cleanup of old entries
+- Limited fitness history to 100 entries
+- Limited time series metrics to 100 entries  
+- Limited performance snapshots to 1000 entries
+- Added automatic cleanup to prevent unbounded growth
 
-**Impact**: Prevents unbounded memory growth
+**Impact**: Prevents memory leaks during long-running experiments
 
-### 3. Experiment Scale Reduction
+### 3. CRITICAL HO Algorithm Fixes
+**File**: `src/main/java/org/puneet/cloudsimplus/hiippo/algorithm/HippopotamusOptimization.java`
+
+**Changes**:
+- **Fixed VM allocation failures**: Added fallback strategy when no suitable hosts found
+- **Made validation flexible**: Changed from throwing exceptions to logging warnings for partial solutions
+- **Added resource constraint handling**: Algorithm now places VMs even when perfect hosts unavailable
+- **Improved solution creation**: Ensures all VMs are placed using least-loaded host fallback
+
+**Impact**: Fixes the "Solution does not place all VMs" errors that were causing experiment failures
+
+### 4. SLA Violation Calculation Fix
+**File**: `src/main/java/org/puneet/cloudsimplus/hiippo/simulation/ExperimentRunner.java`
+
+**Changes**:
+- Removed SLA violation calculation override that was masking real violations
+- Let CloudSimHOSimulation's accurate SLA violation calculation stand
+- Fixed the pattern where SLA violations equaled total VM count
+
+**Impact**: SLA violations now show real values instead of always equaling total VMs
+
+### 5. Experiment Scale Reduction
 **File**: `src/main/resources/config.properties`
 **Changes**:
 - Reduced replications from 30 to 10
@@ -42,7 +64,7 @@
 
 **Impact**: Reduces total experiments from 540 to 90
 
-### 4. Algorithm Parameters (Already Optimized)
+### 6. Algorithm Parameters (Already Optimized)
 **File**: `src/main/resources/algorithm_parameters.properties`
 **Current Settings** (already optimal):
 - Population size: 30 (was 120)
