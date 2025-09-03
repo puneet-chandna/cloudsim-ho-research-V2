@@ -686,23 +686,42 @@ public class CSVResultsWriter {
             .withHeader("Algorithm", "VmCount", "HostCount", "ExecutionTime", "MemoryUsage", 
                        "CpuUtilization", "QualityScore", "SuccessRate")
             .withRecordSeparator("\n");
-        
         try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filePath));
              CSVPrinter printer = new CSVPrinter(writer, format)) {
-            
             for (Map.Entry<String, List<ExperimentResult>> entry : allResults.entrySet()) {
                 List<ExperimentResult> results = entry.getValue();
                 for (ExperimentResult result : results) {
-                    // Extract scalability metrics from result
+                    double memoryUsage = 0.0;
+                    double qualityScore = 0.0;
+                    double successRate = 1.0;
+                    if (result.getMetrics() != null) {
+                        Object mem = result.getMetrics().get("peakMemoryMB");
+                        if (mem instanceof Number) memoryUsage = ((Number) mem).doubleValue();
+                        Object qual = result.getMetrics().get("qualityScore");
+                        if (qual instanceof Number) qualityScore = ((Number) qual).doubleValue();
+                        Object succ = result.getMetrics().get("successRate");
+                        if (succ instanceof Number) successRate = ((Number) succ).doubleValue();
+                    }
+                    int hostCount = 0;
+                    if (result.getHosts() != null) {
+                        hostCount = result.getHosts().size();
+                    } else if (scenarioSpecs != null && scenarioSpecs.containsKey(result.getScenario())) {
+                        Object specObj = scenarioSpecs.get(result.getScenario());
+                        try {
+                            java.lang.reflect.Field hostField = specObj.getClass().getDeclaredField("hostCount");
+                            hostField.setAccessible(true);
+                            hostCount = hostField.getInt(specObj);
+                        } catch (Exception ignored) { }
+                    }
                     printer.printRecord(
                         algorithm,
                         result.getVmTotal(),
-                        result.getHosts() != null ? result.getHosts().size() : 0,
+                        hostCount,
                         result.getExecutionTime(),
-                        0.0, // Memory usage placeholder
+                        memoryUsage,
                         result.getResourceUtilCPU(),
-                        0.0, // Quality score placeholder
-                        1.0  // Success rate placeholder
+                        qualityScore,
+                        successRate
                     );
                 }
             }

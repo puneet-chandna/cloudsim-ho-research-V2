@@ -710,25 +710,50 @@ public class ExperimentCoordinator {
      */
     private void generateConvergenceAnalysis() {
         logger.info("Generating convergence analysis...");
-        
         try {
             List<String> optimizationAlgorithms = Arrays.asList("HO", "GA");
-            
             for (String algorithm : optimizationAlgorithms) {
                 for (String scenario : scenarios) {
                     String key = algorithm + "_" + scenario;
                     if (allResults.containsKey(key)) {
                         List<ExperimentResult> results = allResults.get(key);
-                        // Process each result individually for convergence data
                         for (ExperimentResult result : results) {
-                            // Use default values for convergence data since we don't have iteration-level data
-                            CSVResultsWriter.writeConvergenceData(algorithm, scenario, result.getReplication(),
-                                result.getConvergenceIterations(), 0.0, 0.0, 0.0, 0.0);
+                            double finalFitness = 0.0;
+                            double improvementRate = 0.0;
+                            double avgFitness = 0.0;
+                            double diversity = 0.0;
+                            if (result.getMetrics() != null) {
+                                Object ff = result.getMetrics().get("finalFitness");
+                                if (ff instanceof Number) {
+                                    finalFitness = ((Number) ff).doubleValue();
+                                }
+                                Object imp = result.getMetrics().get("improvementRate");
+                                if (imp instanceof Number) {
+                                    improvementRate = ((Number) imp).doubleValue();
+                                }
+                                Object avg = result.getMetrics().get("averageFitness");
+                                if (avg instanceof Number) {
+                                    avgFitness = ((Number) avg).doubleValue();
+                                }
+                                Object div = result.getMetrics().get("populationDiversity");
+                                if (div instanceof Number) {
+                                    diversity = ((Number) div).doubleValue();
+                                }
+                            }
+                            CSVResultsWriter.writeConvergenceData(
+                                algorithm,
+                                scenario,
+                                result.getReplication(),
+                                result.getConvergenceIterations(),
+                                finalFitness,
+                                avgFitness,
+                                diversity,
+                                improvementRate
+                            );
                         }
                     }
                 }
             }
-            
         } catch (Exception e) {
             logger.error("Failed to generate convergence analysis", e);
         }

@@ -652,18 +652,38 @@ public class MetricsCollector {
         if (cloudlets == null || cloudlets.isEmpty()) {
             return 0;
         }
-        
-        return (int) cloudlets.stream()
-            .filter(cloudlet -> {
-                try {
-                    // Check if cloudlet execution time exceeds SLA threshold
-                    double executionTime = cloudlet.getFinishTime() - cloudlet.getSubmissionDelay();
-                    return executionTime > SLA_RESPONSE_TIME_THRESHOLD;
-                } catch (Exception e) {
-                    logger.warn("Could not check SLA violation for cloudlet: {}", cloudlet.getId());
-                    return false;
+        int violations = 0;
+        for (Cloudlet cloudlet : cloudlets) {
+            try {
+                if (cloudlet == null) {
+                    continue;
                 }
-            })
-            .count();
+                if (cloudlet.getStatus() != Cloudlet.Status.SUCCESS) {
+                    // Count only successfully finished cloudlets for SLA timing
+                    continue;
+                }
+                Vm vm = cloudlet.getVm();
+                if (vm == null) {
+                    continue;
+                }
+                double requestedMips = vm.getMips();
+                if (requestedMips <= 0) {
+                    continue;
+                }
+                // Expected time based on workload length and requested MIPS
+                double expectedTime = cloudlet.getLength() / requestedMips;
+                double actualTime = cloudlet.getFinishTime() - cloudlet.getStartTime();
+                if (!Double.isFinite(expectedTime) || !Double.isFinite(actualTime) || expectedTime <= 0) {
+                    continue;
+                }
+                // Use the same thresholding approach as collectSLAViolations
+                if (actualTime > expectedTime * SLA_RESPONSE_TIME_THRESHOLD) {
+                    violations++;
+                }
+            } catch (Exception e) {
+                logger.warn("Could not check SLA violation for cloudlet: {}", cloudlet != null ? cloudlet.getId() : "null");
+            }
+        }
+        return violations;
     }
 }
