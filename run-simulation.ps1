@@ -28,7 +28,7 @@ if ($TOTAL_MEM -lt 64) {
 }
 
 # Check if the JAR file exists
-$JAR_PATH = "target/cloudsim-ho-research-experiment.jar"
+$JAR_PATH = "target/cloudsim-ho-research-v2-1.0-SNAPSHOT.jar"
 if (-Not (Test-Path $JAR_PATH)) {
     Write-Host "Error: JAR file not found at $JAR_PATH"
     Exit

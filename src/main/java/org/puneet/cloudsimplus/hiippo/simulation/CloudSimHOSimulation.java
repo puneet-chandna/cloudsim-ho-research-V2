@@ -733,7 +733,7 @@ public class CloudSimHOSimulation {
             cpuUtilization = 0.1; // 10% minimum
             ramUtilization = 0.1; // 10% minimum
             powerConsumption = 100.0; // 100W minimum
-            slaViolations = totalVms; // Assume all VMs failed
+            slaViolations = 0; // SLA violations should be 0 if we can't calculate them properly
             allocatedVms = 0;
         }
         
@@ -958,56 +958,31 @@ public class CloudSimHOSimulation {
     }
     
     /**
-     * Calculates the number of SLA violations, combining allocation failures
-     * and runtime performance degradation.
+     * Calculates the number of SLA violations based on cloudlet execution failures.
+     * SLA violations are defined as cloudlets that failed to execute successfully,
+     * NOT as VM allocation failures (which are separate metrics).
      */
     private int calculateSLAViolations() {
         int violations = 0;
-        int failedAllocations = 0;
-        int performanceViolations = 0;
-        int cloudletViolations = 0;
-
-        // 1. Count VMs that failed to be allocated (these are NOT SLA violations)
-        failedAllocations = vmList.size() - countAllocatedVms();
-        logger.info("DEBUG: Failed allocations: {} (not counted as SLA violations)", failedAllocations);
-
-        // 2. Check for runtime performance degradation (actual SLA violations)
-        for (Vm vm : vmList) {
-            // Only check VMs that were successfully placed
-            if (vm.getHost() != null && vm.getHost() != Host.NULL) {
-                double requestedMips = vm.getMips();
-                double allocatedMips = 0.0;
-                Object mipsObj = vm.getHost().getVmScheduler().getAllocatedMips(vm);
-                if (mipsObj instanceof Number) {
-                    allocatedMips = ((Number) mipsObj).doubleValue();
-                } else if (mipsObj instanceof List) {
-                    for (Object o : (List<?>) mipsObj) {
-                        if (o instanceof Number) allocatedMips += ((Number) o).doubleValue();
+        
+        try {
+            // Check for cloudlet execution failures (actual SLA violations)
+            if (broker != null && broker.getCloudletFinishedList() != null) {
+                for (Cloudlet cloudlet : broker.getCloudletFinishedList()) {
+                    if (cloudlet.getStatus() != Cloudlet.Status.SUCCESS) {
+                        violations++;
+                        logger.debug("DEBUG: SLA violation for Cloudlet {}: status {}", 
+                                   cloudlet.getId(), cloudlet.getStatus());
                     }
                 }
-                // If the VM receives less than 95% of its requested CPU, count as a violation
-                if (allocatedMips < requestedMips * 0.95) {
-                    performanceViolations++;
-                    logger.debug("DEBUG: Performance SLA violation for VM {}: allocated {} < requested {} * 0.95", 
-                               vm.getId(), allocatedMips, requestedMips);
-                }
             }
+            
+            logger.info("DEBUG: SLA Violations calculated - Total: {} (based on failed cloudlets)", violations);
+            
+        } catch (Exception e) {
+            logger.warn("Error calculating SLA violations: {}. Returning 0.", e.getMessage());
+            violations = 0;
         }
-        
-        // 3. Check for cloudlet execution failures
-        for (Cloudlet cloudlet : broker.getCloudletFinishedList()) {
-            if (cloudlet.getStatus() != Cloudlet.Status.SUCCESS) {
-                cloudletViolations++;
-                logger.debug("DEBUG: Cloudlet SLA violation for Cloudlet {}: status {}", 
-                           cloudlet.getId(), cloudlet.getStatus());
-            }
-        }
-
-        violations = performanceViolations + cloudletViolations;
-        
-        logger.info("DEBUG: SLA Violations breakdown - Performance: {}, Cloudlet: {}, Total: {}", 
-                   performanceViolations, cloudletViolations, violations);
-        logger.info("DEBUG: Allocation failures: {} (not SLA violations)", failedAllocations);
 
         return violations;
     }

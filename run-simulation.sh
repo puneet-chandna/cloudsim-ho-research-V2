@@ -31,7 +31,7 @@ if [ "$TOTAL_MEM" -lt 64 ]; then
 fi
 
 # Check if the JAR file exists
-JAR_PATH="target/cloudsim-ho-research-experiment.jar"
+JAR_PATH="target/cloudsim-ho-research-v2-1.0-SNAPSHOT.jar"
 if [ ! -f "$JAR_PATH" ]; then
     echo "Error: JAR file not found at $JAR_PATH"
     exit 1
