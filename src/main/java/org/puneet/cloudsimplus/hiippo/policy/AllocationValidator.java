@@ -179,7 +179,7 @@ public class AllocationValidator {
         // Resource availability check
         if (!host.isSuitableForVm(vm)) {
             violations.add(String.format(
-                "Host %d insufficient for VM %d: CPU=%.2f/%.2f, RAM=%.2f/%.2f, BW=%.2f/%.2f",
+                "Host %d insufficient for VM %d: CPU=%.2f/%.2f, RAM=%d/%d, BW=%d/%d",
                 host.getId(), vm.getId(),
                 vm.getTotalMipsCapacity(), host.getTotalMipsCapacity(),
                 vm.getRam().getCapacity(), host.getRam().getAvailableResource(),

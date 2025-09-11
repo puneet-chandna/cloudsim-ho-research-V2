@@ -58,7 +58,8 @@ public class ConvergenceAnalyzer {
      * @param windowSize the size of the sliding window for analysis
      */
     public ConvergenceAnalyzer(int windowSize) {
-        this(windowSize, 0.001, 0.0001, 0.00001, 10);
+        // CRITICAL FIX: Relax convergence criteria to allow proper optimization
+        this(windowSize, 0.01, 0.001, 0.0001, 20);
     }
     
     /**

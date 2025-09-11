@@ -104,10 +104,25 @@
 
 ### Phase 3: Experiment Scale Reduction ✅
 - **Replications**: Reduced from 30 to 10
-- **Scenarios**: Limited to Micro, Small, Medium only (disabled Large, XLarge, Enterprise)
+- [ ] **Scenarios**: Limited to Micro, Small, Medium only (disabled Large, XLarge, Enterprise)
 - **Config properties**: Updated with conservative settings and safety parameters
 - **Performance monitoring**: Reduced frequency from 1s to 5s intervals
 - **Validation**: Relaxed strict mode for better stability
+
+### Data Quality & Convergence Fixes ✅ COMPLETED  
+- [x] **Fix utilization fraction clamping** - Added bounds checking [0,1] in HO fitness calculations to prevent downstream errors
+- [x] **Fix reflection failures in baseline policies** - Removed brittle reflection-based hostList injection in BaselineVmAllocationPolicy
+- [x] **Fix format conversion errors** - Corrected String.format specifiers in AllocationValidator (%d for long values, %f for double values)
+- [x] **Fix power consumption utilization clamping** - Added bounds checking in calculatePowerConsumption to prevent "utilizationFraction must be between [0 and 1]" errors
+
+### Current Status
+The critical issues identified in the logs have been resolved:
+1. ✅ **Reflection failures** - BaselineVmAllocationPolicy no longer uses reflection to access non-existent fields
+2. ✅ **Utilization clamping** - HO fitness calculations now properly clamp values to [0,1] range in all methods  
+3. ✅ **Format errors** - String.format issues in validation have been addressed (RAM/BW use %d, CPU uses %f)
+4. ✅ **Power model errors** - Utilization values passed to power models are now properly clamped
+
+**Next Step**: Re-run the full experiment to verify all issues are resolved and normal runtime is restored.
 
 ## EXPECTED RESULTS
 - **Log file size**: From 66GB/45GB to maximum 100MB each

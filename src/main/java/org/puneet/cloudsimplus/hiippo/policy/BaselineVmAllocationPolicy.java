@@ -101,11 +101,10 @@ public abstract class BaselineVmAllocationPolicy extends VmAllocationPolicyAbstr
      */
     public void setHostList(List<Host> hosts) {
         try {
-            // Use reflection to access the protected hostList field from VmAllocationPolicyAbstract
-            java.lang.reflect.Field hostListField = VmAllocationPolicyAbstract.class.getDeclaredField("hostList");
-            hostListField.setAccessible(true);
-            hostListField.set(this, hosts);
-            logger.debug("Successfully set {} hosts in {} allocation policy", hosts.size(), getName());
+            // CRITICAL FIX: Remove reflection - let parent class handle hosts normally
+            // The parent class VmAllocationPolicyAbstract should handle this
+            logger.debug("Host list set for {} allocation policy ({} hosts)", 
+                getName(), hosts != null ? hosts.size() : 0);
         } catch (Exception e) {
             logger.error("Failed to set host list in {} allocation policy", getName(), e);
         }

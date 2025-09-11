@@ -182,14 +182,32 @@ public class HippopotamusOptimization {
     private List<Hippopotamus> initializePopulation(List<Vm> vms, List<Host> hosts) {
         List<Hippopotamus> population = new ArrayList<>();
         
-        for (int i = 0; i < parameters.getPopulationSize(); i++) {
-            HippopotamusVmAllocationPolicy.Solution solution = createRandomSolution(vms, hosts);
-            double fitness = evaluateFitness(solution);
+        // CRITICAL FIX: Include some good initial solutions for better convergence
+        int populationSize = parameters.getPopulationSize();
+        
+        for (int i = 0; i < populationSize; i++) {
+            HippopotamusVmAllocationPolicy.Solution solution;
             
+            // First few solutions: Use intelligent placement strategies
+            if (i < Math.min(5, populationSize / 3)) {
+                if (i == 0) {
+                    solution = createFirstFitSolution(vms, hosts);
+                } else if (i == 1) {
+                    solution = createBestFitSolution(vms, hosts);
+                } else {
+                    solution = createLoadBalancedSolution(vms, hosts);
+                }
+            } else {
+                // Rest: Random solutions for diversity
+                solution = createRandomSolution(vms, hosts);
+            }
+            
+            double fitness = evaluateFitness(solution);
             Hippopotamus hippo = new Hippopotamus(solution, fitness);
             population.add(hippo);
             
-            logger.trace("Initialized hippo {} with fitness {}", i, fitness);
+            logger.trace("Initialized hippo {} with fitness {} (strategy: {})", 
+                       i, fitness, i < 3 ? "intelligent" : "random");
         }
         
         return population;
@@ -224,6 +242,74 @@ public class HippopotamusOptimization {
                 logger.debug("VM {} placed on fallback host {} due to resource constraints", 
                            vm.getId(), fallbackHost.getId());
             }
+        }
+        
+        return solution;
+    }
+    
+    /**
+     * Creates a FirstFit solution for better initialization.
+     * 
+     * @param vms the VMs to place
+     * @param hosts the available hosts
+     * @return a FirstFit solution
+     */
+    private HippopotamusVmAllocationPolicy.Solution createFirstFitSolution(List<Vm> vms, List<Host> hosts) {
+        HippopotamusVmAllocationPolicy.Solution solution = new HippopotamusVmAllocationPolicy.Solution();
+        
+        for (Vm vm : vms) {
+            // Find first suitable host
+            Host selectedHost = hosts.stream()
+                .filter(host -> host.isSuitableForVm(vm))
+                .findFirst()
+                .orElse(hosts.get(0)); // Fallback to first host
+            solution.addMapping(vm, selectedHost);
+        }
+        
+        return solution;
+    }
+    
+    /**
+     * Creates a BestFit solution for better initialization.
+     * 
+     * @param vms the VMs to place
+     * @param hosts the available hosts
+     * @return a BestFit solution
+     */
+    private HippopotamusVmAllocationPolicy.Solution createBestFitSolution(List<Vm> vms, List<Host> hosts) {
+        HippopotamusVmAllocationPolicy.Solution solution = new HippopotamusVmAllocationPolicy.Solution();
+        
+        for (Vm vm : vms) {
+            // Find host with least remaining capacity that can fit this VM
+            Host selectedHost = hosts.stream()
+                .filter(host -> host.isSuitableForVm(vm))
+                .min(Comparator.comparingDouble(host -> 
+                    (host.getTotalMipsCapacity() - host.getTotalAllocatedMips()) / host.getTotalMipsCapacity()))
+                .orElse(hosts.get(0)); // Fallback to first host
+            solution.addMapping(vm, selectedHost);
+        }
+        
+        return solution;
+    }
+    
+    /**
+     * Creates a load-balanced solution for better initialization.
+     * 
+     * @param vms the VMs to place
+     * @param hosts the available hosts
+     * @return a load-balanced solution
+     */
+    private HippopotamusVmAllocationPolicy.Solution createLoadBalancedSolution(List<Vm> vms, List<Host> hosts) {
+        HippopotamusVmAllocationPolicy.Solution solution = new HippopotamusVmAllocationPolicy.Solution();
+        
+        for (Vm vm : vms) {
+            // Find host with lowest current utilization
+            Host selectedHost = hosts.stream()
+                .filter(host -> host.isSuitableForVm(vm))
+                .min(Comparator.comparingDouble(host -> 
+                    host.getTotalAllocatedMips() / host.getTotalMipsCapacity()))
+                .orElse(hosts.get(0)); // Fallback to first host
+            solution.addMapping(vm, selectedHost);
         }
         
         return solution;
@@ -390,7 +476,8 @@ public class HippopotamusOptimization {
             powerConsumption = Math.max(1.0, powerConsumption); // Ensure at least 1.0
             slaViolations = Math.max(0.0, Math.min(1.0, slaViolations)); // Ensure between 0.0 and 1.0
             
-            // Calculate weighted fitness (lower is better)
+            // CRITICAL FIX: Calculate weighted fitness (lower is better)
+            // We want to MAXIMIZE resource utilization, MINIMIZE power consumption, MINIMIZE SLA violations
             double fitness = AlgorithmConstants.W_UTILIZATION * (1.0 - resourceUtilization) + 
                            AlgorithmConstants.W_POWER * (powerConsumption / 1000.0) + 
                            AlgorithmConstants.W_SLA * slaViolations;
@@ -484,6 +571,13 @@ public class HippopotamusOptimization {
             double utilization = vms.stream()
                 .mapToDouble(Vm::getTotalMipsCapacity)
                 .sum() / host.getTotalMipsCapacity();
+            
+            // CRITICAL FIX: Clamp utilization to [0,1] to prevent downstream errors
+            if (Double.isFinite(utilization)) {
+                utilization = Math.max(0.0, Math.min(1.0, utilization));
+            } else {
+                utilization = 0.0;
+            }
             
             double power = host.getPowerModel().getPower(utilization);
             totalPower += power;

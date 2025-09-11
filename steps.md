@@ -73,6 +73,45 @@
 
 **Impact**: 16x reduction in operations per replication
 
+#### Fix 3: Address Format Conversion Issues
+**File**: `src/main/java/org/puneet/cloudsimplus/hiippo/policy/AllocationValidator.java`
+**Changes**:
+- Verified String.format specifiers match data types
+- Ensured proper type casting for numeric values
+- Fixed potential format conversion mismatches
+
+#### Fix 4: Fix String.format Specifier Mismatches
+**File**: `src/main/java/org/puneet/cloudsimplus/hiippo/policy/AllocationValidator.java`
+**Changes**:
+- **Problem**: `IllegalFormatConversionException: f != java.lang.Long` in `validateVmPlacement()`
+- **Root Cause**: Using `%.2f` format specifier for `long` values (RAM and BW capacity)
+- **Solution**: Changed RAM and BW format specifiers from `%.2f` to `%d` for long values
+- **Code**:
+```java
+// Before (causing format errors):
+"Host %d insufficient for VM %d: CPU=%.2f/%.2f, RAM=%.2f/%.2f, BW=%.2f/%.2f"
+
+// After (fixed):
+"Host %d insufficient for VM %d: CPU=%.2f/%.2f, RAM=%d/%d, BW=%d/%d"
+```
+
+#### Fix 5: Fix Power Consumption Utilization Clamping
+**File**: `src/main/java/org/puneet/cloudsimplus/hiippo/algorithm/HippopotamusOptimization.java`
+**Changes**:
+- **Problem**: "utilizationFraction must be between [0 and 1]" error in `calculatePowerConsumption()`
+- **Root Cause**: Utilization values passed to `host.getPowerModel().getPower(utilization)` were not clamped
+- **Solution**: Added bounds checking and clamping to [0,1] range before calling power model
+- **Code**:
+```java
+// CRITICAL FIX: Clamp utilization to [0,1] to prevent downstream errors
+if (Double.isFinite(utilization)) {
+    utilization = Math.max(0.0, Math.min(1.0, utilization));
+} else {
+    utilization = 0.0;
+}
+double power = host.getPowerModel().getPower(utilization);
+```
+
 ## Expected Results
 - **Log files**: Maximum 100MB each (vs 66GB/45GB before)
 - **Total experiments**: 90 (vs 540 before)

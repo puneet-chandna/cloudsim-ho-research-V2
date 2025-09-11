@@ -102,21 +102,22 @@ public final class AlgorithmConstants {
      * Optimized for better VM placement convergence and solution quality.
      * Range: [0.0, 1.0]
      */
-    public static final double ALPHA = 0.75;  // Stronger leader influence for better convergence
+    // CRITICAL FIX: Adjust parameters for better exploration and convergence
+    public static final double ALPHA = 0.60;  // Balanced leader influence
     
     /**
      * Beta parameter: Exploration parameter for prey influence.
      * Optimized for better exploration-exploitation balance in VM placement.
      * Range: [0.0, 1.0]
      */
-    public static final double BETA = 0.15;  // Better exploration balance
+    public static final double BETA = 0.25;  // Increased exploration
     
     /**
      * Gamma parameter: Exploitation parameter for random walk.
      * Optimized for better local search in VM placement optimization.
      * Range: [0.0, 1.0]
      */
-    public static final double GAMMA = 0.10;  // Maintained for local search
+    public static final double GAMMA = 0.15;  // Increased random walk
     
     /**
      * Levy flight parameter for random walk generation.
