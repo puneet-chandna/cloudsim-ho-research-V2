@@ -10,7 +10,7 @@ class ExperimentConfigTest {
     @Test
     void testConfigConstants() {
         assertEquals(123456L, ExperimentConfig.RANDOM_SEED);
-        assertEquals(10, ExperimentConfig.REPLICATION_COUNT);  // Updated to 10for statistical significance
+        assertEquals(30, ExperimentConfig.REPLICATION_COUNT);  // Updated to 30 for statistical significance
         assertEquals(0.95, ExperimentConfig.CONFIDENCE_LEVEL);
         assertEquals(0.05, ExperimentConfig.SIGNIFICANCE_LEVEL);
         assertTrue(ExperimentConfig.ENABLE_BATCH_PROCESSING);

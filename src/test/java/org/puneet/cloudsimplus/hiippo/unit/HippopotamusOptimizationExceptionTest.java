@@ -29,7 +29,7 @@ class HippopotamusOptimizationExceptionTest {
     @Test
     void testInvalidParameterFactory() {
         HippopotamusOptimizationException ex = HippopotamusOptimizationException.invalidParameter(
-                "populationSize", -1, "> 0");
+                "populationSize", -5, "> 0");
         assertEquals(HippopotamusOptimizationException.ErrorCode.INVALID_PARAMETER, ex.getErrorCode());
         assertTrue(ex.getMessage().contains("Invalid parameter 'populationSize'"));
     }
@@ -50,7 +50,7 @@ class HippopotamusOptimizationExceptionTest {
 
     @Test
     void testMemoryConstraintFactory() {
-        HippopotamusOptimizationException ex = HippopotamusOptimizationException.memoryConstraint(1024, 512, "MB");
+        HippopotamusOptimizationException ex = HippopotamusOptimizationException.memoryConstraint(2048, 1024, "MB");
         assertEquals(HippopotamusOptimizationException.ErrorCode.MEMORY_CONSTRAINT, ex.getErrorCode());
         assertTrue(ex.getMessage().contains("Memory constraint violation"));
     }

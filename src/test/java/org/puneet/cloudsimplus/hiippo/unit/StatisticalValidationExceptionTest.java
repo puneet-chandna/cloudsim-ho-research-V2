@@ -62,14 +62,14 @@ class StatisticalValidationExceptionTest {
 
     @Test
     void testInvalidPValueFactory() {
-        StatisticalValidationException ex = StatisticalValidationException.invalidPValue(-0.1, "t-test");
+        StatisticalValidationException ex = StatisticalValidationException.invalidPValue(1.5, "t-test");
         assertEquals(StatisticalValidationException.StatisticalErrorType.INVALID_P_VALUE, ex.getErrorType());
         assertTrue(ex.getDetailedMessage().contains("Invalid p-value"));
     }
 
     @Test
     void testConfidenceIntervalErrorFactory() {
-        StatisticalValidationException ex = StatisticalValidationException.confidenceIntervalError("dataset", 0.95, "bad interval");
+        StatisticalValidationException ex = StatisticalValidationException.confidenceIntervalError("dataset", 0.95, "invalid bounds");
         assertEquals(StatisticalValidationException.StatisticalErrorType.CONFIDENCE_INTERVAL_ERROR, ex.getErrorType());
         assertTrue(ex.getDetailedMessage().contains("Confidence interval calculation failed"));
     }
