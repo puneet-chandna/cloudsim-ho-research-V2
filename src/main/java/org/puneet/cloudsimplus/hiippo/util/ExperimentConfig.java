@@ -37,7 +37,7 @@ public final class ExperimentConfig {
     public static final long RANDOM_SEED = 123456L;
     
     // Experiment configuration - Increased for statistical significance and real cloud simulation
-    public static final int REPLICATION_COUNT = 10;  
+    public static final int REPLICATION_COUNT = 30;  
     public static final long MAX_HEAP_SIZE = 50L * 1024 * 1024 * 1024; // 50GB
     public static final long MEMORY_WARNING_THRESHOLD = 45L * 1024 * 1024 * 1024; // 45GB
     

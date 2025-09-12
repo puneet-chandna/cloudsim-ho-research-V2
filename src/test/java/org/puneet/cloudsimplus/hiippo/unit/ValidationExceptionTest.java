@@ -67,7 +67,7 @@ class ValidationExceptionTest {
 
     @Test
     void testConstraintViolationFactory() {
-        ValidationException ex = ValidationException.constraintViolation("constraint", 1, "must be > 0");
+        ValidationException ex = ValidationException.constraintViolation("constraint", -1, "must be > 0");
         assertEquals(ValidationException.ValidationType.CONSTRAINT_VALIDATION, ex.getValidationType());
         assertTrue(ex.getDetailedMessage().contains("Constraint"));
     }

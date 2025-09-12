@@ -3,7 +3,6 @@ package org.puneet.cloudsimplus.hiippo.unit;
 import org.junit.jupiter.api.Test;
 import org.puneet.cloudsimplus.hiippo.exceptions.ScalabilityTestException;
 import static org.junit.jupiter.api.Assertions.*;
-import java.util.List;
 
 class ScalabilityTestExceptionTest {
 
@@ -48,14 +47,14 @@ class ScalabilityTestExceptionTest {
 
     @Test
     void testPerformanceDegradationFactory() {
-        ScalabilityTestException ex = ScalabilityTestException.performanceDegradation("scenario", 100.0, 80.0, 0.2, null);
+        ScalabilityTestException ex = ScalabilityTestException.performanceDegradation("scenario", 100.0, 50.0, 0.5, null);
         assertEquals(ScalabilityTestException.ScalabilityErrorType.PERFORMANCE_DEGRADATION, ex.getErrorType());
         assertTrue(ex.getDetailedMessage().contains("Unacceptable performance degradation"));
     }
 
     @Test
     void testScenarioTooLargeFactory() {
-        ScalabilityTestException ex = ScalabilityTestException.scenarioTooLarge(1000, 100, 500, 50, 1024);
+        ScalabilityTestException ex = ScalabilityTestException.scenarioTooLarge(10000, 100, 5000, 50, 1024);
         assertEquals(ScalabilityTestException.ScalabilityErrorType.SCENARIO_TOO_LARGE, ex.getErrorType());
         assertTrue(ex.getDetailedMessage().contains("Scenario exceeds system capabilities"));
     }
