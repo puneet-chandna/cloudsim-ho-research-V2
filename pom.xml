@@ -21,6 +21,15 @@
         <junit.version>5.10.1</junit.version>
     </properties>
     
+    <!-- Distribution Management for GitHub Packages -->
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/puneet-chandna/cloudsim-ho-research-V2</url>
+        </repository>
+    </distributionManagement>
+    
     <dependencies>
         <!-- CloudSim Plus -->
         <dependency>
@@ -94,14 +103,6 @@
         </dependency>
         </dependencies>
     
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub Puneet Apache Maven Packages</name>
-            <url>https://maven.pkg.github.com/puneet-chandna/cloudsim-ho-research-V2</url>
-        </repository>
-    </distributionManagement>
-    
     <build>
         <plugins>
             <plugin>
@@ -168,6 +169,13 @@
                                         <exclude>META-INF/versions/*/module-info.class</exclude>
                                     </excludes>
                                 </filter>
+                                <!-- CRITICAL FIX: Exclude commons-math3 from shaded JAR to prevent overlapping classes -->
+                                <filter>
+                                    <artifact>org.apache.commons:commons-math3</artifact>
+                                    <excludes>
+                                        <exclude>**</exclude>
+                                    </excludes>
+                                </filter>
                             </filters>
                             <minimizeJar>false</minimizeJar>
                             <shadedArtifactAttached>false</shadedArtifactAttached>
@@ -175,6 +183,17 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            
+            <!-- Maven Deploy Plugin Configuration for GitHub Packages -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-deploy-plugin</artifactId>
+                <version>3.1.2</version>
+                <configuration>
+                    <repositoryId>github</repositoryId>
+                    <url>https://maven.pkg.github.com/puneet-chandna/cloudsim-ho-research-V2</url>
+                </configuration>
             </plugin>
         </plugins>
         
