@@ -120,8 +120,17 @@ public class HippopotamusOptimization {
         // Main optimization loop
         int iteration = 0;
         boolean converged = false;
+        long startTime = System.currentTimeMillis();
+        long maxExecutionTime = 300000; // 5 minutes max execution time
 
         while (iteration < parameters.getMaxIterations() && !converged) {
+            // CRITICAL FIX: Add timeout protection to prevent infinite loops
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - startTime > maxExecutionTime) {
+                logger.warn("HO algorithm timeout after {}ms, forcing termination at iteration {}", 
+                           currentTime - startTime, iteration);
+                break;
+            }
             // Memory check
             if (iteration % 10 == 0) {
                 MemoryManager.checkMemoryUsage("HO Iteration " + iteration);
@@ -667,9 +676,16 @@ public class HippopotamusOptimization {
             Host currentHost = solution.getHostForVm(vm);
 
             if (currentHost == null || !currentHost.isSuitableForVm(vm)) {
-                // Find best suitable host based on load balancing
-                List<Host> suitableHosts = solution.getAllocations().values().stream()
-                        .distinct()
+                // CRITICAL FIX: Look at ALL available hosts, not just those in current solution
+                // Get all hosts from the datacenter
+                List<Host> allHosts = currentHost != null ? 
+                    currentHost.getDatacenter().getHostList() :
+                    solution.getAllocations().values().stream()
+                        .findFirst()
+                        .map(host -> host.getDatacenter().getHostList())
+                        .orElse(new ArrayList<>());
+                
+                List<Host> suitableHosts = allHosts.stream()
                         .filter(h -> h.isSuitableForVm(vm))
                         .collect(Collectors.toList());
 
