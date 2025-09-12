@@ -894,9 +894,11 @@ public class ExperimentRunner implements AutoCloseable {
                 datacenter.getHostList());
             metrics.put("powerConsumption", powerConsumption);
             
-            // SLA violations
-            int slaViolations = collector.countSLAViolations(broker.getCloudletFinishedList());
-            metrics.put("slaViolations", (double) slaViolations);
+            // SLA violations - REMOVED: This was overriding the correct SLA violations 
+            // calculated by CloudSimHOSimulation. The SLA violations are already 
+            // calculated correctly in the simulation results.
+            // int slaViolations = collector.countSLAViolations(broker.getCloudletFinishedList());
+            // metrics.put("slaViolations", (double) slaViolations);
             
             // VM allocation success - use broker's VM lists instead of host VM lists
             // The broker's getVmCreatedList() contains VMs that were successfully allocated
@@ -1080,6 +1082,20 @@ public class ExperimentRunner implements AutoCloseable {
         } else {
             result.setConvergenceIterations(1); // Non-iterative algorithms
             result.setFinalFitness(0.0);
+        }
+        
+        // Add additional fitness metrics for convergence analysis
+        if (result.getMetrics() != null) {
+            // Set default values for missing metrics
+            if (!result.getMetrics().containsKey("improvementRate")) {
+                result.getMetrics().put("improvementRate", 0.0);
+            }
+            if (!result.getMetrics().containsKey("averageFitness")) {
+                result.getMetrics().put("averageFitness", 0.0);
+            }
+            if (!result.getMetrics().containsKey("populationDiversity")) {
+                result.getMetrics().put("populationDiversity", 0.0);
+            }
         }
         
         // Additional metrics
